@@ -6,7 +6,7 @@ import { lockRewardRateForDeal, recordReward } from '../lib/commission';
 import { formatCurrency } from '../lib/utils';
 import Modal from '../components/Modal';
 import { TableRowSkeleton } from '../components/Skeleton';
-import { Plus, Pencil, Trash2, ClipboardList } from 'lucide-react';
+import { Plus, Pencil, Trash2, ClipboardList, ChevronDown, ChevronRight } from 'lucide-react';
 
 // 簡素化したステータス（紹介された → 契約（有料登録）→ 見送り）
 const DEAL_STATUS = [
@@ -35,6 +35,7 @@ export default function Deals() {
   const [partners, setPartners] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -139,6 +140,18 @@ export default function Deals() {
     fetchAll();
   };
 
+  // 人（パートナー×紹介先）ごとにまとめる
+  const groups = (() => {
+    const map = {};
+    deals.forEach(d => {
+      const key = `${d.partner_id || ''}__${d.customer_name || ''}`;
+      if (!map[key]) map[key] = { key, customer_name: d.customer_name, customer_contact: d.customer_contact, partner: d.partners?.name, items: [] };
+      map[key].items.push(d);
+    });
+    return Object.values(map);
+  })();
+  const toggle = (key) => setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
+
   const handleDelete = async (deal) => {
     const ok = await confirm({ title: '紹介状況の削除', message: `「${deal.customer_name}」を削除しますか？`, confirmLabel: '削除する', variant: 'danger' });
     if (!ok) return;
@@ -165,50 +178,68 @@ export default function Deals() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
+                <th style={{ ...th, width: '2rem' }}></th>
                 <th style={th}>紹介先</th>
                 <th style={th}>パートナー</th>
-                <th style={th}>商材</th>
-                <th style={th}>金額</th>
-                <th style={th}>次回連絡</th>
-                <th style={th}>状況</th>
-                <th style={{ ...th, textAlign: 'right' }}>操作</th>
+                <th style={th}>紹介/契約</th>
+                <th style={{ ...th, textAlign: 'right' }}></th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <TableRowSkeleton cols={7} rows={5} />
-              ) : deals.length === 0 ? (
-                <tr><td style={{ ...td, textAlign: 'center', color: 'var(--text-muted)', padding: '2.5rem' }} colSpan={7}>
+                <TableRowSkeleton cols={5} rows={5} />
+              ) : groups.length === 0 ? (
+                <tr><td style={{ ...td, textAlign: 'center', color: 'var(--text-muted)', padding: '2.5rem' }} colSpan={5}>
                   <ClipboardList size={28} style={{ opacity: 0.4, marginBottom: '0.5rem' }} /><br />
                   紹介状況がまだありません。
                 </td></tr>
-              ) : deals.map(d => {
-                const s = statusInfo(d.status);
+              ) : groups.map(g => {
+                const isOpen = !!expanded[g.key];
+                const cc = g.items.filter(x => normStatus(x.status) === 'contracted').length;
                 return (
-                  <tr key={d.id}>
-                    <td style={{ ...td, fontWeight: 700 }}>
-                      {d.customer_name}
-                      {d.customer_contact && <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500 }}>{d.customer_contact}</div>}
-                    </td>
-                    <td style={td}>{d.partners?.name || '—'}</td>
-                    <td style={td}>{d.products ? `${d.products.services?.name || ''} ${d.products.name}`.trim() : '—'}</td>
-                    <td style={td}>{d.amount != null ? formatCurrency(d.amount) : '—'}</td>
-                    <td style={td}>{d.next_contact_date || '—'}</td>
-                    <td style={td}>
-                      <select
-                        value={normStatus(d.status)}
-                        onChange={e => handleStatusChange(d, e.target.value)}
-                        className="status-select"
-                        style={{ fontSize: '0.78rem', fontWeight: 700, padding: '0.25rem 1.5rem 0.25rem 0.6rem', borderRadius: '9999px', border: 'none', background: s.bg, color: s.color, cursor: 'pointer' }}
-                      >
-                        {DEAL_STATUS.map(o => <option key={o.value} value={o.value} style={{ background: '#fff', color: '#1e293b' }}>{o.label}</option>)}
-                      </select>
-                    </td>
-                    <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      <button className="btn btn-secondary" onClick={() => openEdit(d)} style={{ padding: '0.35rem 0.6rem', marginRight: '0.4rem' }}><Pencil size={15} /></button>
-                      <button className="btn btn-danger" onClick={() => handleDelete(d)} style={{ padding: '0.35rem 0.6rem' }}><Trash2 size={15} /></button>
-                    </td>
-                  </tr>
+                  <React.Fragment key={g.key}>
+                    <tr style={{ cursor: 'pointer' }} onClick={() => toggle(g.key)}>
+                      <td style={{ ...td, textAlign: 'center' }}>{isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</td>
+                      <td style={{ ...td, fontWeight: 700 }}>
+                        {g.customer_name}
+                        {g.customer_contact && <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500 }}>{g.customer_contact}</div>}
+                      </td>
+                      <td style={td}>{g.partner || '—'}</td>
+                      <td style={td}>
+                        <span style={{ fontSize: '0.82rem' }}>紹介 {g.items.length} 件</span>
+                        {cc > 0 && <span style={{ fontSize: '0.72rem', fontWeight: 700, marginLeft: '0.4rem', padding: '0.1rem 0.5rem', borderRadius: '9999px', background: '#dcfce7', color: '#059669' }}>契約 {cc}</span>}
+                      </td>
+                      <td style={td}></td>
+                    </tr>
+                    {isOpen && g.items.map(d => {
+                      const s = statusInfo(d.status);
+                      return (
+                        <tr key={d.id} style={{ background: 'var(--bg-subtle, #f8fafc)' }}>
+                          <td style={td}></td>
+                          <td style={{ ...td, paddingLeft: '1.5rem' }} colSpan={2}>
+                            {d.products ? `${d.products.services?.name || ''} ${d.products.name}`.trim() : '商材未定'}
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                              {d.amount != null ? `月額 ${formatCurrency(d.amount)}` : '月額未設定'}{d.next_contact_date ? ` ・ 次回 ${d.next_contact_date}` : ''}
+                            </div>
+                          </td>
+                          <td style={td}>
+                            <select
+                              value={normStatus(d.status)}
+                              onChange={e => handleStatusChange(d, e.target.value)}
+                              className="status-select"
+                              style={{ fontSize: '0.78rem', fontWeight: 700, padding: '0.25rem 1.5rem 0.25rem 0.6rem', borderRadius: '9999px', border: 'none', background: s.bg, color: s.color, cursor: 'pointer' }}
+                            >
+                              {DEAL_STATUS.map(o => <option key={o.value} value={o.value} style={{ background: '#fff', color: '#1e293b' }}>{o.label}</option>)}
+                            </select>
+                          </td>
+                          <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <button className="btn btn-secondary" onClick={() => openEdit(d)} style={{ padding: '0.3rem 0.5rem', marginRight: '0.35rem' }}><Pencil size={14} /></button>
+                            <button className="btn btn-danger" onClick={() => handleDelete(d)} style={{ padding: '0.3rem 0.5rem' }}><Trash2 size={14} /></button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </React.Fragment>
                 );
               })}
             </tbody>

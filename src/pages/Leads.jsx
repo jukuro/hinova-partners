@@ -5,7 +5,7 @@ import { useConfirm } from '../hooks/useConfirm';
 import { resolveRewardRate, calcReward, currentPaymentMonth } from '../lib/commission';
 import Modal from '../components/Modal';
 import { TableRowSkeleton } from '../components/Skeleton';
-import { Plus, Trash2, Send } from 'lucide-react';
+import { Plus, Trash2, Send, ChevronDown, ChevronRight } from 'lucide-react';
 
 const LEAD_STATUS = [
   { value: 'referred', label: '紹介された', color: '#2563eb', bg: '#dbeafe' },
@@ -31,6 +31,20 @@ export default function Leads() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState(emptyForm);
+  const [expanded, setExpanded] = useState({});
+
+  // 人（パートナー×紹介先）ごとにまとめる
+  const groups = (() => {
+    const map = {};
+    leads.forEach(l => {
+      const key = `${l.partner_id || ''}__${l.customer_name || ''}`;
+      if (!map[key]) map[key] = { key, customer_name: l.customer_name, customer_contact: l.customer_contact, partner: l.partners?.name, memo: l.memo, items: [] };
+      map[key].items.push(l);
+    });
+    return Object.values(map);
+  })();
+  const toggle = (key) => setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
+  const contractedCount = (items) => items.filter(x => normStatus(x.status) === 'contracted').length;
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -133,52 +147,68 @@ export default function Leads() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
+                <th style={{ ...th, width: '2rem' }}></th>
                 <th style={th}>紹介先</th>
                 <th style={th}>パートナー</th>
-                <th style={th}>商材</th>
                 <th style={th}>連絡可否</th>
-                <th style={th}>状況</th>
-                <th style={{ ...th, textAlign: 'right' }}>操作</th>
+                <th style={th}>紹介/契約</th>
+                <th style={{ ...th, textAlign: 'right' }}></th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <TableRowSkeleton cols={6} rows={5} />
-              ) : leads.length === 0 ? (
+              ) : groups.length === 0 ? (
                 <tr><td style={{ ...td, textAlign: 'center', color: 'var(--text-muted)', padding: '2.5rem' }} colSpan={6}>
                   <Send size={28} style={{ opacity: 0.4, marginBottom: '0.5rem' }} /><br />
                   紹介がまだありません。
                 </td></tr>
-              ) : leads.map(l => {
-                const s = statusInfo(l.status);
+              ) : groups.map(g => {
+                const isOpen = !!expanded[g.key];
+                const cc = contractedCount(g.items);
                 return (
-                  <tr key={l.id}>
-                    <td style={{ ...td, fontWeight: 700 }}>
-                      {l.customer_name}
-                      {l.customer_contact && <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500 }}>{l.customer_contact}</div>}
-                      {l.memo && <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 400, marginTop: '0.15rem' }}>{l.memo}</div>}
-                    </td>
-                    <td style={td}>{l.partners?.name || '—'}</td>
-                    <td style={td}>{l.products ? `${l.products.services?.name || ''} ${l.products.name}`.trim() : '—'}</td>
-                    <td style={td}>
-                      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: l.ok_to_contact ? '#059669' : '#dc2626' }}>
-                        {l.ok_to_contact ? '連絡OK' : '連絡NG'}
-                      </span>
-                    </td>
-                    <td style={td}>
-                      <select
-                        value={normStatus(l.status)}
-                        onChange={e => handleStatusChange(l, e.target.value)}
-                        className="status-select"
-                        style={{ fontSize: '0.78rem', fontWeight: 700, padding: '0.25rem 1.5rem 0.25rem 0.6rem', borderRadius: '9999px', border: 'none', background: s.bg, color: s.color, cursor: 'pointer' }}
-                      >
-                        {LEAD_STATUS.map(o => <option key={o.value} value={o.value} style={{ background: '#fff', color: '#1e293b' }}>{o.label}</option>)}
-                      </select>
-                    </td>
-                    <td style={{ ...td, textAlign: 'right' }}>
-                      <button className="btn btn-danger" onClick={() => handleDelete(l)} style={{ padding: '0.35rem 0.6rem' }}><Trash2 size={15} /></button>
-                    </td>
-                  </tr>
+                  <React.Fragment key={g.key}>
+                    <tr style={{ cursor: 'pointer' }} onClick={() => toggle(g.key)}>
+                      <td style={{ ...td, textAlign: 'center' }}>{isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</td>
+                      <td style={{ ...td, fontWeight: 700 }}>
+                        {g.customer_name}
+                        {g.customer_contact && <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500 }}>{g.customer_contact}</div>}
+                      </td>
+                      <td style={td}>{g.partner || '—'}</td>
+                      <td style={td}><span style={{ fontSize: '0.72rem', fontWeight: 700, color: g.items.some(x => x.ok_to_contact) ? '#059669' : '#dc2626' }}>{g.items.some(x => x.ok_to_contact) ? '連絡OK' : '連絡NG'}</span></td>
+                      <td style={td}>
+                        <span style={{ fontSize: '0.82rem' }}>紹介 {g.items.length} 件</span>
+                        {cc > 0 && <span style={{ fontSize: '0.72rem', fontWeight: 700, marginLeft: '0.4rem', padding: '0.1rem 0.5rem', borderRadius: '9999px', background: '#dcfce7', color: '#059669' }}>契約 {cc}</span>}
+                      </td>
+                      <td style={td}></td>
+                    </tr>
+                    {isOpen && g.items.map(l => {
+                      const s = statusInfo(l.status);
+                      return (
+                        <tr key={l.id} style={{ background: 'var(--bg-subtle, #f8fafc)' }}>
+                          <td style={td}></td>
+                          <td style={{ ...td, paddingLeft: '1.5rem' }} colSpan={2}>
+                            {l.products ? `${l.products.services?.name || ''} ${l.products.name}`.trim() : '商材未定'}
+                            {l.memo && <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{l.memo}</div>}
+                          </td>
+                          <td style={td}></td>
+                          <td style={td}>
+                            <select
+                              value={normStatus(l.status)}
+                              onChange={e => handleStatusChange(l, e.target.value)}
+                              className="status-select"
+                              style={{ fontSize: '0.78rem', fontWeight: 700, padding: '0.25rem 1.5rem 0.25rem 0.6rem', borderRadius: '9999px', border: 'none', background: s.bg, color: s.color, cursor: 'pointer' }}
+                            >
+                              {LEAD_STATUS.map(o => <option key={o.value} value={o.value} style={{ background: '#fff', color: '#1e293b' }}>{o.label}</option>)}
+                            </select>
+                          </td>
+                          <td style={{ ...td, textAlign: 'right' }}>
+                            <button className="btn btn-danger" onClick={() => handleDelete(l)} style={{ padding: '0.3rem 0.55rem' }}><Trash2 size={14} /></button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </React.Fragment>
                 );
               })}
             </tbody>

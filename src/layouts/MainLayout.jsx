@@ -138,6 +138,11 @@ export default function MainLayout() {
           <Outlet />
         </div>
       </main>
+
+      {/* 片手操作用：右下のメニューボタン（モバイル） */}
+      <button className="menu-fab" onClick={() => setOpen(true)} aria-label="メニューを開く">
+        <Menu size={24} />
+      </button>
     </div>
   );
 }

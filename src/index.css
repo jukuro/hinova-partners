@@ -2777,3 +2777,20 @@ option {
 .m-card__row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .m-card__actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 .m-card__actions .btn { flex: 1; justify-content: center; min-height: 2.6rem; }
+
+/* ===== 管理画面：片手操作用メニューボタン（モバイル・右下固定） ===== */
+.menu-fab { display: none; }
+@media (max-width: 1024px) {
+  .menu-fab {
+    display: inline-flex; align-items: center; justify-content: center;
+    position: fixed;
+    right: max(1rem, env(safe-area-inset-right, 0px));
+    bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    width: 3.4rem; height: 3.4rem; border-radius: 9999px;
+    background: linear-gradient(135deg, #0d3d3d, #1a5c5c);
+    color: #e8b800; border: none; cursor: pointer; z-index: 55;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  }
+  /* 右下FABを使うので上部ハンバーガーはモバイルで隠す */
+  .hamburger-btn { display: none !important; }
+}
