@@ -9,6 +9,7 @@ import Login from './pages/Login';
 import PartnerSetup from './pages/PartnerSetup';
 import Dashboard from './pages/Dashboard';
 import Partners from './pages/Partners';
+import Customers from './pages/Customers';
 import Ranks from './pages/Ranks';
 import Products from './pages/Products';
 import Leads from './pages/Leads';
@@ -49,6 +50,7 @@ function AppRoutes() {
       <Route element={<AdminRoute><MainLayout /></AdminRoute>}>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/partners" element={<Partners />} />
+        <Route path="/customers" element={<Customers />} />
         <Route path="/ranks" element={<Ranks />} />
         <Route path="/products" element={<Products />} />
         <Route path="/leads" element={<Leads />} />
