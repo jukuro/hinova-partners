@@ -3,22 +3,16 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { ClipboardList } from 'lucide-react';
 
-const LEAD_STATUS = {
-  received: { label: '受付', color: '#2563eb', bg: '#dbeafe' },
-  in_progress: { label: '対応中', color: '#d97706', bg: '#ffedd5' },
-  started: { label: '利用開始', color: '#059669', bg: '#dcfce7' },
-  skipped: { label: '今回は見送り', color: '#64748b', bg: '#e2e8f0' },
+// 紹介された / 契約（有料登録）/ 見送り
+const STATUS = {
+  referred: { label: '紹介された', color: '#2563eb', bg: '#dbeafe' },
+  contracted: { label: '契約（有料登録）', color: '#059669', bg: '#dcfce7' },
+  skipped: { label: '見送り', color: '#64748b', bg: '#e2e8f0' },
 };
-const DEAL_STATUS = {
-  memo: { label: '紹介メモ', color: '#64748b', bg: '#e2e8f0' },
-  introduced: { label: '紹介済み', color: '#2563eb', bg: '#dbeafe' },
-  hinova_handling: { label: 'Hinova対応中', color: '#0891b2', bg: '#cffafe' },
-  considering: { label: '検討中', color: '#7c3aed', bg: '#ede9fe' },
-  started: { label: '利用開始', color: '#059669', bg: '#dcfce7' },
-  payment_confirmed: { label: '入金確認済み', color: '#047857', bg: '#a7f3d0' },
-  skipped: { label: '今回は見送り', color: '#64748b', bg: '#e2e8f0' },
-  not_applicable: { label: '対応不要', color: '#94a3b8', bg: '#f1f5f9' },
-};
+const LEAD_LEGACY = { received: 'referred', in_progress: 'referred', started: 'contracted', skipped: 'skipped' };
+const DEAL_LEGACY = { memo: 'referred', introduced: 'referred', hinova_handling: 'referred', considering: 'referred', started: 'contracted', payment_confirmed: 'contracted', skipped: 'skipped', not_applicable: 'skipped' };
+const leadStatus = (v) => STATUS[v] || STATUS[LEAD_LEGACY[v]] || STATUS.referred;
+const dealStatus = (v) => STATUS[v] || STATUS[DEAL_LEGACY[v]] || STATUS.referred;
 
 export default function PortalReferrals() {
   const { partner } = useAuth();
@@ -33,8 +27,8 @@ export default function PortalReferrals() {
         supabase.from('deals').select('*, products(name)').eq('partner_id', partner.id).order('created_at', { ascending: false }),
       ]);
       const merged = [
-        ...(leads || []).map(l => ({ ...l, _type: 'lead', _status: LEAD_STATUS[l.status] || LEAD_STATUS.received })),
-        ...(deals || []).map(d => ({ ...d, _type: 'deal', _status: DEAL_STATUS[d.status] || DEAL_STATUS.memo })),
+        ...(leads || []).map(l => ({ ...l, _type: 'lead', _status: leadStatus(l.status) })),
+        ...(deals || []).map(d => ({ ...d, _type: 'deal', _status: dealStatus(d.status) })),
       ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       setItems(merged);
       setLoading(false);

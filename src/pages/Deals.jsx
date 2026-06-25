@@ -8,17 +8,20 @@ import Modal from '../components/Modal';
 import { TableRowSkeleton } from '../components/Skeleton';
 import { Plus, Pencil, Trash2, ClipboardList } from 'lucide-react';
 
+// 簡素化したステータス（紹介された → 契約（有料登録）→ 見送り）
 const DEAL_STATUS = [
-  { value: 'memo', label: '紹介メモ', color: '#64748b', bg: '#e2e8f0' },
-  { value: 'introduced', label: '紹介済み', color: '#2563eb', bg: '#dbeafe' },
-  { value: 'hinova_handling', label: 'Hinova対応中', color: '#0891b2', bg: '#cffafe' },
-  { value: 'considering', label: '検討中', color: '#7c3aed', bg: '#ede9fe' },
-  { value: 'started', label: '利用開始', color: '#059669', bg: '#dcfce7' },
-  { value: 'payment_confirmed', label: '入金確認済み', color: '#047857', bg: '#a7f3d0' },
-  { value: 'skipped', label: '今回は見送り', color: '#64748b', bg: '#e2e8f0' },
-  { value: 'not_applicable', label: '対応不要', color: '#94a3b8', bg: '#f1f5f9' },
+  { value: 'referred', label: '紹介された', color: '#2563eb', bg: '#dbeafe' },
+  { value: 'contracted', label: '契約（有料登録）', color: '#059669', bg: '#dcfce7' },
+  { value: 'skipped', label: '見送り', color: '#64748b', bg: '#e2e8f0' },
 ];
-const statusInfo = (v) => DEAL_STATUS.find(s => s.value === v) || DEAL_STATUS[0];
+// 旧ステータスを新ステータスへ読み替え
+const LEGACY_MAP = {
+  memo: 'referred', introduced: 'referred', hinova_handling: 'referred', considering: 'referred',
+  started: 'contracted', payment_confirmed: 'contracted',
+  skipped: 'skipped', not_applicable: 'skipped',
+};
+const normStatus = (v) => DEAL_STATUS.some(s => s.value === v) ? v : (LEGACY_MAP[v] || 'referred');
+const statusInfo = (v) => DEAL_STATUS.find(s => s.value === normStatus(v)) || DEAL_STATUS[0];
 
 const emptyForm = { partner_id: '', product_id: '', product_ids: [], customer_name: '', customer_contact: '', amount: '', next_contact_date: '', note: '' };
 
@@ -99,26 +102,23 @@ export default function Deals() {
   };
 
   const handleStatusChange = async (deal, newStatus) => {
-    if (newStatus === deal.status) return;
-    const patch = { status: newStatus };
+    const current = normStatus(deal.status);
+    if (newStatus === current) return;
     const today = new Date().toISOString().slice(0, 10);
-    if (newStatus === 'started' && !deal.contracted_at) patch.contracted_at = today;
-    if (newStatus === 'payment_confirmed' && !deal.paid_at) patch.paid_at = today;
+    const patch = { status: newStatus };
+    if (newStatus === 'contracted' && !deal.contracted_at) patch.contracted_at = today;
 
     const { error } = await supabase.from('deals').update(patch).eq('id', deal.id);
     if (error) { toast.error('更新に失敗しました: ' + error.message); return; }
 
     await supabase.from('deal_events').insert([{ deal_id: deal.id, status_from: deal.status, status_to: newStatus }]);
 
-    // 利用開始（契約成立）時に報酬率を確定してロック（契約日ロック）
-    if (newStatus === 'started' && deal.locked_reward_rate == null) {
+    // 「契約（有料登録）」で報酬率を確定（契約日ロック）＋お礼額を一括作成
+    if (newStatus === 'contracted') {
       const contractDate = deal.contracted_at || today;
-      const { rate } = await lockRewardRateForDeal({ ...deal, contracted_at: contractDate }, contractDate);
-      toast.success(`報酬率 ${rate}% を契約日（${contractDate}）で確定しました`);
-    }
-
-    // 入金確認で報酬履歴を作成（率はロック済みのものを使用）
-    if (newStatus === 'payment_confirmed') {
+      if (deal.locked_reward_rate == null) {
+        await lockRewardRateForDeal({ ...deal, contracted_at: contractDate }, contractDate);
+      }
       const { data: existing } = await supabase.from('commissions').select('id').eq('deal_id', deal.id).maybeSingle();
       if (!existing) {
         const { data: fresh } = await supabase.from('deals').select('*').eq('id', deal.id).single();
@@ -130,8 +130,10 @@ export default function Deals() {
           product,
           paymentAmount: deal.amount,
         });
-        if (rErr) { toast.error('お礼額の作成に失敗しました: ' + rErr.message); }
-        else toast.success(amount != null ? `お礼額（${Number(amount).toLocaleString()}円）を作成しました` : 'お礼額を作成しました');
+        if (rErr) toast.error('お礼額の作成に失敗しました: ' + rErr.message);
+        else toast.success(amount != null ? `契約を記録し、お礼額（${Number(amount).toLocaleString()}円）を作成しました` : '契約を記録しました（月額・報酬率をご確認ください）');
+      } else {
+        toast.success('契約に更新しました');
       }
     }
     fetchAll();
@@ -151,7 +153,7 @@ export default function Deals() {
       <div className="page-header">
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>紹介状況</h1>
-          <p className="page-header-desc">継続的に管理する紹介の進捗です。「入金確認済み」にするとお礼額が作成されます。</p>
+          <p className="page-header-desc">パートナーが紹介した顧客の状況です。顧客が有料登録したら「契約（有料登録）」にすると、お礼額が自動計算されます。</p>
         </div>
         <button className="btn btn-primary" onClick={openNew} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
           <Plus size={18} /> 紹介状況を追加
@@ -194,7 +196,7 @@ export default function Deals() {
                     <td style={td}>{d.next_contact_date || '—'}</td>
                     <td style={td}>
                       <select
-                        value={d.status}
+                        value={normStatus(d.status)}
                         onChange={e => handleStatusChange(d, e.target.value)}
                         className="status-select"
                         style={{ fontSize: '0.78rem', fontWeight: 700, padding: '0.25rem 1.5rem 0.25rem 0.6rem', borderRadius: '9999px', border: 'none', background: s.bg, color: s.color, cursor: 'pointer' }}

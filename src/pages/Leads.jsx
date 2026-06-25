@@ -8,12 +8,13 @@ import { TableRowSkeleton } from '../components/Skeleton';
 import { Plus, Trash2, Send } from 'lucide-react';
 
 const LEAD_STATUS = [
-  { value: 'received', label: '受付', color: '#2563eb', bg: '#dbeafe' },
-  { value: 'in_progress', label: '対応中', color: '#d97706', bg: '#ffedd5' },
-  { value: 'started', label: '利用開始', color: '#059669', bg: '#dcfce7' },
-  { value: 'skipped', label: '今回は見送り', color: '#64748b', bg: '#e2e8f0' },
+  { value: 'referred', label: '紹介された', color: '#2563eb', bg: '#dbeafe' },
+  { value: 'contracted', label: '契約（有料登録）', color: '#059669', bg: '#dcfce7' },
+  { value: 'skipped', label: '見送り', color: '#64748b', bg: '#e2e8f0' },
 ];
-const statusInfo = (v) => LEAD_STATUS.find(s => s.value === v) || LEAD_STATUS[0];
+const LEGACY_MAP = { received: 'referred', in_progress: 'referred', started: 'contracted', skipped: 'skipped' };
+const normStatus = (v) => LEAD_STATUS.some(s => s.value === v) ? v : (LEGACY_MAP[v] || 'referred');
+const statusInfo = (v) => LEAD_STATUS.find(s => s.value === normStatus(v)) || LEAD_STATUS[0];
 
 const emptyForm = { partner_id: '', product_ids: [], customer_name: '', customer_contact: '', ok_to_contact: true, memo: '' };
 
@@ -77,10 +78,11 @@ export default function Leads() {
   }));
 
   const handleStatusChange = async (lead, newStatus) => {
+    if (newStatus === normStatus(lead.status)) return;
     const { error } = await supabase.from('leads').update({ status: newStatus }).eq('id', lead.id);
     if (error) { toast.error('更新に失敗しました: ' + error.message); return; }
 
-    if (newStatus === 'started') {
+    if (newStatus === 'contracted') {
       const { data: existing } = await supabase.from('commissions').select('id').eq('lead_id', lead.id).maybeSingle();
       if (!existing) {
         const { data: product } = lead.product_id
@@ -118,7 +120,7 @@ export default function Leads() {
       <div className="page-header">
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>かんたん紹介</h1>
-          <p className="page-header-desc">パートナーから届いた紹介を受け付け、状況を管理します。「利用開始」にするとお礼額が作成されます。</p>
+          <p className="page-header-desc">パートナーから届いた紹介の一覧です。顧客が有料登録したら「契約（有料登録）」にすると、お礼額が自動計算されます。</p>
         </div>
         <button className="btn btn-primary" onClick={openNew} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
           <Plus size={18} /> 紹介を追加
@@ -164,7 +166,7 @@ export default function Leads() {
                     </td>
                     <td style={td}>
                       <select
-                        value={l.status}
+                        value={normStatus(l.status)}
                         onChange={e => handleStatusChange(l, e.target.value)}
                         className="status-select"
                         style={{ fontSize: '0.78rem', fontWeight: 700, padding: '0.25rem 1.5rem 0.25rem 0.6rem', borderRadius: '9999px', border: 'none', background: s.bg, color: s.color, cursor: 'pointer' }}

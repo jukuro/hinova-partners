@@ -24,12 +24,18 @@ export const ROUNDING_OPTIONS = [
   { value: 'round', label: '四捨五入' },
 ];
 
+export const DETECTION_OPTIONS = [
+  { value: 'manual', label: '手動で契約を確認' },
+  { value: 'stripe', label: 'Stripe自動（将来）' },
+];
+const detectionLabel = (v) => DETECTION_OPTIONS.find(d => d.value === v)?.label || '手動で契約を確認';
+
 export const businessLabel = (v) => BUSINESS_OPTIONS.find(b => b.value === v)?.label || '—';
 
 const emptyForm = {
   name: '', business: 'hinova_biz', unit_price: '',
   base_reward_rate: '', max_reward_rate: '', rounding_rule: 'floor_10',
-  description: '', is_active: true,
+  detection_method: 'manual', description: '', is_active: true,
 };
 
 const th = { padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-light)', whiteSpace: 'nowrap' };
@@ -66,6 +72,7 @@ export default function Products() {
       base_reward_rate: p.base_reward_rate ?? '',
       max_reward_rate: p.max_reward_rate ?? '',
       rounding_rule: p.rounding_rule || 'floor_10',
+      detection_method: p.detection_method || 'manual',
       description: p.description || '', is_active: p.is_active ?? true,
     });
     setIsModalOpen(true);
@@ -81,6 +88,7 @@ export default function Products() {
       base_reward_rate: formData.base_reward_rate === '' ? null : Number(formData.base_reward_rate),
       max_reward_rate: formData.max_reward_rate === '' ? null : Number(formData.max_reward_rate),
       rounding_rule: formData.rounding_rule,
+      detection_method: formData.detection_method,
       description: formData.description.trim() || null,
       is_active: formData.is_active,
     };
@@ -138,6 +146,7 @@ export default function Products() {
                 <th style={th}>基本報酬率</th>
                 <th style={th}>お礼目安</th>
                 <th style={th}>端数処理</th>
+                <th style={th}>把握方法</th>
                 <th style={th}>状態</th>
                 <th style={{ ...th, textAlign: 'right' }}>操作</th>
               </tr>
@@ -146,7 +155,7 @@ export default function Products() {
               {loading ? (
                 <TableRowSkeleton cols={8} rows={5} />
               ) : products.length === 0 ? (
-                <tr><td style={{ ...td, textAlign: 'center', color: 'var(--text-muted)', padding: '2.5rem' }} colSpan={8}>
+                <tr><td style={{ ...td, textAlign: 'center', color: 'var(--text-muted)', padding: '2.5rem' }} colSpan={9}>
                   <Package size={28} style={{ opacity: 0.4, marginBottom: '0.5rem' }} /><br />
                   商材がまだ登録されていません。
                 </td></tr>
@@ -163,6 +172,7 @@ export default function Products() {
                     </td>
                     <td style={{ ...td, fontWeight: 700 }}>{est != null ? formatCurrency(est) : '—'}</td>
                     <td style={td}><span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{ROUNDING_LABEL[p.rounding_rule || 'floor_10']}</span></td>
+                    <td style={td}><span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.15rem 0.55rem', borderRadius: '9999px', background: p.detection_method === 'stripe' ? '#ede9fe' : '#f1f5f9', color: p.detection_method === 'stripe' ? '#7c3aed' : '#64748b' }}>{detectionLabel(p.detection_method)}</span></td>
                     <td style={td}>
                       <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.15rem 0.55rem', borderRadius: '9999px', background: p.is_active ? 'rgba(16,185,129,0.12)' : '#f1f5f9', color: p.is_active ? '#059669' : '#94a3b8' }}>
                         {p.is_active ? '有効' : '停止中'}
@@ -206,11 +216,22 @@ export default function Products() {
               <input className="form-input" type="number" min="0" step="0.1" value={formData.max_reward_rate} onChange={e => setFormData({ ...formData, max_reward_rate: e.target.value })} placeholder="上限なしは空欄" />
             </div>
           </div>
-          <div className="form-group">
-            <label className="form-label">端数処理</label>
-            <select className="form-select" value={formData.rounding_rule} onChange={e => setFormData({ ...formData, rounding_rule: e.target.value })}>
-              {ROUNDING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div className="form-group">
+              <label className="form-label">端数処理</label>
+              <select className="form-select" value={formData.rounding_rule} onChange={e => setFormData({ ...formData, rounding_rule: e.target.value })}>
+                {ROUNDING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">契約の把握方法</label>
+              <select className="form-select" value={formData.detection_method} onChange={e => setFormData({ ...formData, detection_method: e.target.value })}>
+                {DETECTION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                {formData.detection_method === 'stripe' ? 'Stripe連携は将来対応。現在は手動で契約を確認します。' : 'デザイン等、直接やり取りする商材向け。'}
+              </p>
+            </div>
           </div>
 
           {previewEstimate && previewEstimate.final != null && (
