@@ -37,9 +37,9 @@ export default function Leads() {
   async function fetchAll() {
     setLoading(true);
     const [{ data: lData }, { data: pData }, { data: prodData }] = await Promise.all([
-      supabase.from('leads').select('*, partners(name), products(name)').order('created_at', { ascending: false }),
+      supabase.from('leads').select('*, partners(name), products(name, services(name))').order('created_at', { ascending: false }),
       supabase.from('partners').select('id, name').eq('is_active', true).order('name'),
-      supabase.from('products').select('id, name').eq('is_active', true).order('name'),
+      supabase.from('products').select('id, name, service_id, services(name)').eq('is_active', true).order('name'),
     ]);
     if (lData) setLeads(lData);
     if (pData) setPartners(pData);
@@ -86,15 +86,16 @@ export default function Leads() {
       const { data: existing } = await supabase.from('commissions').select('id').eq('lead_id', lead.id).maybeSingle();
       if (!existing) {
         const { data: product } = lead.product_id
-          ? await supabase.from('products').select('*').eq('id', lead.product_id).maybeSingle()
+          ? await supabase.from('products').select('*, services(name)').eq('id', lead.product_id).maybeSingle()
           : { data: null };
         const resolved = await resolveRewardRate(lead.partner_id, lead.product_id);
         const payAmount = product?.unit_price != null ? Number(product.unit_price) : null;
         const rule = product?.rounding_rule || 'floor_10';
         const { raw, final } = calcReward(payAmount, resolved.rate, rule);
+        const productLabel = product ? [product.services?.name, product.name].filter(Boolean).join(' ') : null;
         await supabase.from('commissions').insert([{
           lead_id: lead.id, partner_id: lead.partner_id,
-          product_id: lead.product_id || null, product_name: product?.name || null,
+          product_id: lead.product_id || null, product_name: productLabel,
           customer_name: lead.customer_name || null,
           payment_amount: payAmount, applied_rate: resolved.rate, amount: final,
           calculation_basis: { ...resolved, rounding_rule: rule, raw_amount: raw, final_amount: final, locked_at: new Date().toISOString().slice(0, 10) },
@@ -158,7 +159,7 @@ export default function Leads() {
                       {l.memo && <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 400, marginTop: '0.15rem' }}>{l.memo}</div>}
                     </td>
                     <td style={td}>{l.partners?.name || '—'}</td>
-                    <td style={td}>{l.products?.name || '—'}</td>
+                    <td style={td}>{l.products ? `${l.products.services?.name || ''} ${l.products.name}`.trim() : '—'}</td>
                     <td style={td}>
                       <span style={{ fontSize: '0.72rem', fontWeight: 700, color: l.ok_to_contact ? '#059669' : '#dc2626' }}>
                         {l.ok_to_contact ? '連絡OK' : '連絡NG'}
@@ -203,7 +204,7 @@ export default function Leads() {
                 {products.map(p => (
                   <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', fontWeight: 500 }}>
                     <input type="checkbox" checked={formData.product_ids.includes(p.id)} onChange={() => toggleProduct(p.id)} style={{ accentColor: '#e8b800' }} />
-                    {p.name}
+                    {`${p.services?.name || ''} ${p.name}`.trim()}
                   </label>
                 ))}
               </div>

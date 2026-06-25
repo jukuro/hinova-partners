@@ -45,9 +45,9 @@ export default function Deals() {
   async function fetchAll() {
     setLoading(true);
     const [{ data: dData }, { data: pData }, { data: prodData }] = await Promise.all([
-      supabase.from('deals').select('*, partners(name), products(name)').order('created_at', { ascending: false }),
+      supabase.from('deals').select('*, partners(name), products(name, services(name))').order('created_at', { ascending: false }),
       supabase.from('partners').select('id, name').eq('is_active', true).order('name'),
-      supabase.from('products').select('id, name').eq('is_active', true).order('name'),
+      supabase.from('products').select('id, name, service_id, services(name)').eq('is_active', true).order('name'),
     ]);
     if (dData) setDeals(dData);
     if (pData) setPartners(pData);
@@ -123,7 +123,7 @@ export default function Deals() {
       if (!existing) {
         const { data: fresh } = await supabase.from('deals').select('*').eq('id', deal.id).single();
         const { data: product } = deal.product_id
-          ? await supabase.from('products').select('*').eq('id', deal.product_id).maybeSingle()
+          ? await supabase.from('products').select('*, services(name)').eq('id', deal.product_id).maybeSingle()
           : { data: null };
         const { error: rErr, amount } = await recordReward({
           deal: fresh || { ...deal, ...patch },
@@ -191,7 +191,7 @@ export default function Deals() {
                       {d.customer_contact && <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500 }}>{d.customer_contact}</div>}
                     </td>
                     <td style={td}>{d.partners?.name || '—'}</td>
-                    <td style={td}>{d.products?.name || '—'}</td>
+                    <td style={td}>{d.products ? `${d.products.services?.name || ''} ${d.products.name}`.trim() : '—'}</td>
                     <td style={td}>{d.amount != null ? formatCurrency(d.amount) : '—'}</td>
                     <td style={td}>{d.next_contact_date || '—'}</td>
                     <td style={td}>
@@ -240,7 +240,7 @@ export default function Deals() {
                       onChange={() => editingId ? setFormData({ ...formData, product_ids: [p.id] }) : toggleProduct(p.id)}
                       style={{ accentColor: '#e8b800' }}
                     />
-                    {p.name}
+                    {`${p.services?.name || ''} ${p.name}`.trim()}
                   </label>
                 ))}
               </div>

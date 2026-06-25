@@ -98,11 +98,13 @@ export async function recordReward({ deal, product, paymentAmount, paymentMonth 
     : (product?.unit_price != null ? Number(product.unit_price) : null);
   const { raw, final } = calcReward(amount, rate, rule);
 
+  const svcName = product?.services?.name;
+  const productLabel = product ? [svcName, product.name].filter(Boolean).join(' ') : null;
   const { error } = await supabase.from('commissions').insert([{
     deal_id: deal.id,
     partner_id: deal.partner_id,
     product_id: deal.product_id || null,
-    product_name: product?.name || null,
+    product_name: productLabel,
     customer_name: deal.customer_name || null,
     payment_amount: amount,
     applied_rate: rate,

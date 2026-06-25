@@ -54,7 +54,7 @@ export default function Partners() {
     setLoading(true);
     const [{ data: pData }, { data: prodData }, { data: rData }] = await Promise.all([
       supabase.from('partners').select('*, partner_products(product_id), partner_ranks(name, rate_addition)').order('created_at', { ascending: false }),
-      supabase.from('products').select('*').eq('is_active', true).order('created_at'),
+      supabase.from('products').select('*, services(name)').eq('is_active', true).order('created_at'),
       supabase.from('partner_ranks').select('*').order('sort_order'),
     ]);
     if (pData) setPartners(pData);
@@ -66,7 +66,7 @@ export default function Partners() {
   const buildRows = (assigned = {}, overrides = {}) =>
     products.map(p => ({
       productId: p.id,
-      name: p.name,
+      name: `${p.services?.name || ''} ${p.name}`.trim(),
       business: p.business,
       base_reward_rate: p.base_reward_rate,
       checked: !!assigned[p.id],

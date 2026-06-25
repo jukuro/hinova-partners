@@ -23,8 +23,8 @@ export default function PortalReferrals() {
     if (!partner) return;
     (async () => {
       const [{ data: leads }, { data: deals }] = await Promise.all([
-        supabase.from('leads').select('*, products(name)').eq('partner_id', partner.id).order('created_at', { ascending: false }),
-        supabase.from('deals').select('*, products(name)').eq('partner_id', partner.id).order('created_at', { ascending: false }),
+        supabase.from('leads').select('*, products(name, services(name))').eq('partner_id', partner.id).order('created_at', { ascending: false }),
+        supabase.from('deals').select('*, products(name, services(name))').eq('partner_id', partner.id).order('created_at', { ascending: false }),
       ]);
       const merged = [
         ...(leads || []).map(l => ({ ...l, _type: 'lead', _status: leadStatus(l.status) })),
@@ -53,7 +53,7 @@ export default function PortalReferrals() {
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 700 }}>{it.customer_name}</div>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                  {it.products?.name || '商材未定'} ・ {new Date(it.created_at).toLocaleDateString('ja-JP')}
+                  {it.products ? `${it.products.services?.name || ''} ${it.products.name}`.trim() : '商材未定'} ・ {new Date(it.created_at).toLocaleDateString('ja-JP')}
                 </div>
               </div>
               <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '9999px', background: it._status.bg, color: it._status.color, whiteSpace: 'nowrap' }}>

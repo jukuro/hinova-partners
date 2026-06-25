@@ -14,6 +14,7 @@ const withRef = (url, code) => {
 export default function PortalRefer() {
   const { partner } = useAuth();
   const toast = useToast();
+  const [services, setServices] = useState([]);
   const [products, setProducts] = useState([]);
   const [form, setForm] = useState({ product_ids: [], customer_name: '', customer_contact: '', ok_to_contact: true, memo: '' });
   const [saving, setSaving] = useState(false);
@@ -22,32 +23,30 @@ export default function PortalRefer() {
   useEffect(() => {
     if (!partner) return;
     (async () => {
-      // 担当商材があればそれを、なければ有効な全商材を表示
-      const { data: pp } = await supabase.from('partner_products').select('product_id').eq('partner_id', partner.id);
+      const [{ data: svc }, { data: prods }, { data: pp }] = await Promise.all([
+        supabase.from('services').select('id, name, lp_url').eq('is_active', true).order('sort_order').order('name'),
+        supabase.from('products').select('id, name, service_id').eq('is_active', true).order('name'),
+        supabase.from('partner_products').select('product_id').eq('partner_id', partner.id),
+      ]);
+      setServices(svc || []);
+      // 担当プランがあればそれを、なければ有効な全プラン
       const assignedIds = (pp || []).map(r => r.product_id);
-      const { data: prods } = await supabase.from('products').select('id, name, business, lp_url').eq('is_active', true).order('name');
       const list = assignedIds.length ? (prods || []).filter(p => assignedIds.includes(p.id)) : (prods || []);
       setProducts(list);
     })();
   }, [partner]);
 
   const code = partner?.referral_code;
+  const serviceName = (id) => services.find(s => s.id === id)?.name || '商材';
 
-  // 同じLP URLは1つにまとめる（例：Biz スタンダード/プレミアムは同一LP）
-  const baseName = (name) => (name || '').split(/\s*[-－]\s*/)[0].trim();
-  const lpGroups = (() => {
-    const map = {};
-    products.filter(p => p.lp_url).forEach(p => {
-      if (!map[p.lp_url]) map[p.lp_url] = { lp_url: p.lp_url, names: [], bases: new Set() };
-      map[p.lp_url].names.push(p.name);
-      map[p.lp_url].bases.add(baseName(p.name));
-    });
-    return Object.values(map).map(g => ({
-      lp_url: g.lp_url,
-      // 共通の事業名（例：Hinova Biz）。揃わなければ商品名を併記
-      label: g.bases.size === 1 ? [...g.bases][0] : g.names.join(' / '),
-    }));
-  })();
+  // LP共有は商材（サービス）単位
+  const lpGroups = services.filter(s => s.lp_url).map(s => ({ lp_url: s.lp_url, label: s.name }));
+
+  // 手入力フォーム：プランを商材ごとにグルーピング
+  const grouped = services
+    .map(s => ({ service: s, plans: products.filter(p => p.service_id === s.id) }))
+    .filter(g => g.plans.length > 0);
+  const ungrouped = products.filter(p => !services.some(s => s.id === p.service_id));
 
   const shareLp = async (g) => {
     const url = withRef(g.lp_url, code);
@@ -135,12 +134,25 @@ export default function PortalRefer() {
 
       <form onSubmit={handleSubmit} className="glass-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         <div className="form-group">
-          <label className="form-label">紹介する商材（複数選択可）</label>
+          <label className="form-label">紹介する商材・プラン（複数選択可）</label>
           {products.length === 0 ? (
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>紹介できる商材がまだありません。</p>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', border: '1px solid var(--border-light)', borderRadius: '0.6rem', padding: '0.6rem 0.75rem' }}>
-              {products.map(p => (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', border: '1px solid var(--border-light)', borderRadius: '0.6rem', padding: '0.6rem 0.75rem' }}>
+              {grouped.map(({ service, plans }) => (
+                <div key={service.id}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--text-muted)', marginBottom: '0.25rem' }}>{service.name}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingLeft: '0.25rem' }}>
+                    {plans.map(p => (
+                      <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', fontWeight: 500 }}>
+                        <input type="checkbox" checked={form.product_ids.includes(p.id)} onChange={() => toggleProduct(p.id)} style={{ accentColor: '#e8b800' }} />
+                        {p.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {ungrouped.map(p => (
                 <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', fontWeight: 500 }}>
                   <input type="checkbox" checked={form.product_ids.includes(p.id)} onChange={() => toggleProduct(p.id)} style={{ accentColor: '#e8b800' }} />
                   {p.name}
