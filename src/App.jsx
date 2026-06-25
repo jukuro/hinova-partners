@@ -7,6 +7,7 @@ import MainLayout from './layouts/MainLayout';
 import PortalLayout from './layouts/PortalLayout';
 import Login from './pages/Login';
 import PartnerSetup from './pages/PartnerSetup';
+import ReferralLanding from './pages/ReferralLanding';
 import Dashboard from './pages/Dashboard';
 import Partners from './pages/Partners';
 import Customers from './pages/Customers';
@@ -45,6 +46,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/portal/setup/:token" element={<PartnerSetup />} />
+      <Route path="/r/:code" element={<ReferralLanding />} />
 
       {/* 管理者 */}
       <Route element={<AdminRoute><MainLayout /></AdminRoute>}>

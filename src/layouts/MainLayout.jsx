@@ -107,7 +107,7 @@ export default function MainLayout() {
       </aside>
 
       <main className="main-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <header className="topbar glass" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.7rem 1rem', borderBottom: '1px solid var(--border-light)', position: 'sticky', top: 0, zIndex: 30 }}>
+        <header className="topbar glass" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.7rem 1rem', paddingTop: 'calc(0.7rem + env(safe-area-inset-top, 0px))', borderBottom: '1px solid var(--border-light)', position: 'sticky', top: 0, zIndex: 30 }}>
           {/* モバイル：ハンバーガー */}
           <button className="hamburger-btn" onClick={() => setOpen(true)} aria-label="メニューを開く"
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)', padding: '0.35rem', display: 'inline-flex' }}>

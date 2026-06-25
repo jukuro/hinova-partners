@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { formatCurrency } from '../../lib/utils';
-import { Send, ClipboardList, Coins, Award } from 'lucide-react';
+import { useToast } from '../../contexts/ToastContext';
+import { Send, ClipboardList, Coins, Award, Link2, Share2 } from 'lucide-react';
 
 const isThisMonth = (d) => {
   if (!d) return false;
@@ -16,6 +17,30 @@ const CONTRACTED = ['contracted', 'started', 'payment_confirmed'];
 export default function PortalHome() {
   const { partner } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
+
+  // 自分の紹介URL（紹介コード入り）
+  const referralUrl = partner?.referral_code ? `${window.location.origin}/r/${partner.referral_code}` : null;
+  const shareText = 'Hinovaのサービスのご案内です。下記からお気軽にお問い合わせください。';
+
+  const shareReferral = async () => {
+    if (!referralUrl) { toast.error('紹介リンクがまだありません。マイページをご確認ください。'); return; }
+    if (navigator.share) {
+      try { await navigator.share({ title: 'Hinova サービスのご案内', text: shareText, url: referralUrl }); } catch { /* キャンセル */ }
+    } else {
+      try { await navigator.clipboard.writeText(referralUrl); toast.success('紹介リンクをコピーしました'); }
+      catch { toast.error('コピーに失敗しました: ' + referralUrl); }
+    }
+  };
+  const copyReferral = async () => {
+    if (!referralUrl) return;
+    try { await navigator.clipboard.writeText(referralUrl); toast.success('紹介リンクをコピーしました'); }
+    catch { toast.error('コピーに失敗しました: ' + referralUrl); }
+  };
+  const lineShare = () => {
+    if (!referralUrl) return;
+    window.open(`https://line.me/R/msg/text/?${encodeURIComponent(shareText + '\n' + referralUrl)}`, '_blank');
+  };
   const [rank, setRank] = useState(null);
   const [leads, setLeads] = useState([]);
   const [deals, setDeals] = useState([]);
@@ -80,9 +105,26 @@ export default function PortalHome() {
         </div>
       </div>
 
-      {/* クイック紹介 */}
-      <button className="btn btn-primary" onClick={() => navigate('/portal/refer')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '1rem', fontSize: '1rem' }}>
-        <Send size={20} /> 知り合いに紹介する
+      {/* 紹介リンクを送る（LINE/SNS） */}
+      <div className="glass-card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+        <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>紹介リンクを送る</div>
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>LINEやSNSでこのリンクを送るだけ。受け取った方が入力すると、あなたの紹介として登録されます。</div>
+        <button className="btn btn-primary" onClick={shareReferral} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.85rem' }}>
+          <Share2 size={18} /> リンクを送る
+        </button>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+          <button className="btn btn-secondary" onClick={lineShare} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.7rem', color: '#06c755' }}>
+            LINEで送る
+          </button>
+          <button className="btn btn-secondary" onClick={copyReferral} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.7rem' }}>
+            <Link2 size={16} /> コピー
+          </button>
+        </div>
+      </div>
+
+      {/* 手入力で紹介 */}
+      <button className="btn btn-secondary" onClick={() => navigate('/portal/refer')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.85rem' }}>
+        <Send size={18} /> 手入力で紹介する
       </button>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>

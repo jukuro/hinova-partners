@@ -18,7 +18,7 @@ export default function PortalLayout() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-app, #f7f8fa)' }}>
       {/* ヘッダ */}
-      <header className="glass" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.85rem 1.1rem', position: 'sticky', top: 0, zIndex: 20 }}>
+      <header className="glass" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.85rem 1.1rem', paddingTop: 'calc(0.85rem + env(safe-area-inset-top, 0px))', position: 'sticky', top: 0, zIndex: 20 }}>
         <NavLink to="/portal/profile" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', textDecoration: 'none' }}>
           <div style={{ width: '2rem', height: '2rem', borderRadius: '0.55rem', background: 'linear-gradient(135deg, #0d3d3d, #e8b800)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ fontWeight: 800, color: '#fff', fontSize: '0.72rem' }}>HP</span>
