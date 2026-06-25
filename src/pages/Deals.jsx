@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../contexts/ToastContext';
 import { useConfirm } from '../hooks/useConfirm';
-import { resolveCommissionAmount, currentPaymentMonth } from '../lib/commission';
+import { lockRewardRateForDeal, recordReward } from '../lib/commission';
 import { formatCurrency } from '../lib/utils';
 import Modal from '../components/Modal';
 import { TableRowSkeleton } from '../components/Skeleton';
@@ -20,7 +20,7 @@ const DEAL_STATUS = [
 ];
 const statusInfo = (v) => DEAL_STATUS.find(s => s.value === v) || DEAL_STATUS[0];
 
-const emptyForm = { partner_id: '', product_id: '', customer_name: '', customer_contact: '', amount: '', next_contact_date: '', note: '' };
+const emptyForm = { partner_id: '', product_id: '', product_ids: [], customer_name: '', customer_contact: '', amount: '', next_contact_date: '', note: '' };
 
 const th = { padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-light)', whiteSpace: 'nowrap' };
 const td = { padding: '0.85rem 1rem', fontSize: '0.875rem', borderBottom: '1px solid var(--border-light)', verticalAlign: 'middle' };
@@ -57,27 +57,40 @@ export default function Deals() {
     setEditingId(d.id);
     setFormData({
       partner_id: d.partner_id || '', product_id: d.product_id || '',
+      product_ids: d.product_id ? [d.product_id] : [],
       customer_name: d.customer_name || '', customer_contact: d.customer_contact || '',
       amount: d.amount ?? '', next_contact_date: d.next_contact_date || '', note: d.note || '',
     });
     setIsModalOpen(true);
   };
 
+  const toggleProduct = (pid) => setFormData(prev => ({
+    ...prev,
+    product_ids: prev.product_ids.includes(pid)
+      ? prev.product_ids.filter(x => x !== pid)
+      : [...prev.product_ids, pid],
+  }));
+
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
-    const payload = {
+    const base = {
       partner_id: formData.partner_id || null,
-      product_id: formData.product_id || null,
       customer_name: formData.customer_name.trim(),
       customer_contact: formData.customer_contact.trim() || null,
       amount: formData.amount === '' ? null : Number(formData.amount),
       next_contact_date: formData.next_contact_date || null,
       note: formData.note.trim() || null,
     };
-    const { error } = editingId
-      ? await supabase.from('deals').update(payload).eq('id', editingId)
-      : await supabase.from('deals').insert([payload]);
+    let error;
+    if (editingId) {
+      // 編集時は単一商材（先頭）で更新
+      ({ error } = await supabase.from('deals').update({ ...base, product_id: formData.product_ids[0] || null }).eq('id', editingId));
+    } else {
+      // 新規は商材ごとに1件ずつ作成（fan-out）。未選択なら商材なしで1件。
+      const ids = formData.product_ids.length ? formData.product_ids : [null];
+      ({ error } = await supabase.from('deals').insert(ids.map(pid => ({ ...base, product_id: pid }))));
+    }
     setSaving(false);
     if (error) { toast.error('保存に失敗しました: ' + error.message); return; }
     toast.success(editingId ? '更新しました' : '紹介状況を登録しました');
@@ -88,23 +101,37 @@ export default function Deals() {
   const handleStatusChange = async (deal, newStatus) => {
     if (newStatus === deal.status) return;
     const patch = { status: newStatus };
-    if (newStatus === 'started' && !deal.contracted_at) patch.contracted_at = new Date().toISOString().slice(0, 10);
-    if (newStatus === 'payment_confirmed' && !deal.paid_at) patch.paid_at = new Date().toISOString().slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    if (newStatus === 'started' && !deal.contracted_at) patch.contracted_at = today;
+    if (newStatus === 'payment_confirmed' && !deal.paid_at) patch.paid_at = today;
 
     const { error } = await supabase.from('deals').update(patch).eq('id', deal.id);
     if (error) { toast.error('更新に失敗しました: ' + error.message); return; }
 
     await supabase.from('deal_events').insert([{ deal_id: deal.id, status_from: deal.status, status_to: newStatus }]);
 
+    // 利用開始（契約成立）時に報酬率を確定してロック（契約日ロック）
+    if (newStatus === 'started' && deal.locked_reward_rate == null) {
+      const contractDate = deal.contracted_at || today;
+      const { rate } = await lockRewardRateForDeal({ ...deal, contracted_at: contractDate }, contractDate);
+      toast.success(`報酬率 ${rate}% を契約日（${contractDate}）で確定しました`);
+    }
+
+    // 入金確認で報酬履歴を作成（率はロック済みのものを使用）
     if (newStatus === 'payment_confirmed') {
       const { data: existing } = await supabase.from('commissions').select('id').eq('deal_id', deal.id).maybeSingle();
       if (!existing) {
-        const { amount, commission_type } = await resolveCommissionAmount(deal.partner_id, deal.product_id, deal.amount);
-        await supabase.from('commissions').insert([{
-          deal_id: deal.id, partner_id: deal.partner_id, amount, commission_type,
-          payment_month: currentPaymentMonth(), status: amount != null ? 'confirmed' : 'pending',
-        }]);
-        toast.success(amount != null ? `お礼額（${Math.round(amount).toLocaleString()}円）を作成しました` : 'お礼額を作成しました（金額は管理者確認待ち）');
+        const { data: fresh } = await supabase.from('deals').select('*').eq('id', deal.id).single();
+        const { data: product } = deal.product_id
+          ? await supabase.from('products').select('*').eq('id', deal.product_id).maybeSingle()
+          : { data: null };
+        const { error: rErr, amount } = await recordReward({
+          deal: fresh || { ...deal, ...patch },
+          product,
+          paymentAmount: deal.amount,
+        });
+        if (rErr) { toast.error('お礼額の作成に失敗しました: ' + rErr.message); }
+        else toast.success(amount != null ? `お礼額（${Number(amount).toLocaleString()}円）を作成しました` : 'お礼額を作成しました');
       }
     }
     fetchAll();
@@ -189,21 +216,36 @@ export default function Deals() {
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? '紹介状況の編集' : '紹介状況を追加'}>
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div className="form-group">
-              <label className="form-label">パートナー</label>
-              <select className="form-select" value={formData.partner_id} onChange={e => setFormData({ ...formData, partner_id: e.target.value })}>
-                <option value="">（未選択）</option>
-                {partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">商材</label>
-              <select className="form-select" value={formData.product_id} onChange={e => setFormData({ ...formData, product_id: e.target.value })}>
-                <option value="">（未選択）</option>
-                {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
+          <div className="form-group">
+            <label className="form-label">パートナー</label>
+            <select className="form-select" value={formData.partner_id} onChange={e => setFormData({ ...formData, partner_id: e.target.value })}>
+              <option value="">（未選択）</option>
+              {partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">商材{editingId ? '' : '（複数選択可）'}</label>
+            {products.length === 0 ? (
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>商材が登録されていません。</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', border: '1px solid var(--border-light)', borderRadius: '0.6rem', padding: '0.6rem 0.75rem', maxHeight: '11rem', overflowY: 'auto' }}>
+                {products.map(p => (
+                  <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', fontWeight: 500 }}>
+                    <input
+                      type={editingId ? 'radio' : 'checkbox'}
+                      name="deal-product"
+                      checked={formData.product_ids.includes(p.id)}
+                      onChange={() => editingId ? setFormData({ ...formData, product_ids: [p.id] }) : toggleProduct(p.id)}
+                      style={{ accentColor: '#e8b800' }}
+                    />
+                    {p.name}
+                  </label>
+                ))}
+              </div>
+            )}
+            {!editingId && formData.product_ids.length > 1 && (
+              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>商材ごとに1件ずつ紹介状況が登録されます（{formData.product_ids.length}件）。</p>
+            )}
           </div>
           <div className="form-group">
             <label className="form-label">紹介先の名前 *</label>
@@ -215,8 +257,8 @@ export default function Deals() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div className="form-group">
-              <label className="form-label">金額（売上率のお礼に使用）</label>
-              <input className="form-input" type="number" min="0" value={formData.amount} onChange={e => setFormData({ ...formData, amount: e.target.value })} placeholder="例: 50000" />
+              <label className="form-label">月額（報酬計算に使用）</label>
+              <input className="form-input" type="number" min="0" value={formData.amount} onChange={e => setFormData({ ...formData, amount: e.target.value })} placeholder="例: 2980" />
             </div>
             <div className="form-group">
               <label className="form-label">次回連絡日（任意）</label>

@@ -21,24 +21,41 @@ export default function Dashboard() {
   const [leads, setLeads] = useState([]);
   const [deals, setDeals] = useState([]);
   const [commissions, setCommissions] = useState([]);
-  const [partnerCount, setPartnerCount] = useState(0);
+  const [partners, setPartners] = useState([]);
+  const partnerCount = useMemo(() => partners.filter(p => p.status === 'active').length, [partners]);
 
   useEffect(() => { fetchAll(); }, []);
 
   async function fetchAll() {
     setLoading(true);
-    const [{ data: l }, { data: d }, { data: c }, { count }] = await Promise.all([
-      supabase.from('leads').select('status, created_at'),
-      supabase.from('deals').select('status, created_at, contracted_at'),
-      supabase.from('commissions').select('amount, status, payment_month'),
-      supabase.from('partners').select('id', { count: 'exact', head: true }).eq('is_active', true),
+    const [{ data: l }, { data: d }, { data: c }, { data: p }] = await Promise.all([
+      supabase.from('leads').select('status, created_at, partner_id'),
+      supabase.from('deals').select('status, created_at, contracted_at, partner_id, amount'),
+      supabase.from('commissions').select('amount, status, payment_month, partner_id'),
+      supabase.from('partners').select('id, name, status, partner_ranks(name)'),
     ]);
     setLeads(l || []);
     setDeals(d || []);
     setCommissions(c || []);
-    setPartnerCount(count || 0);
+    setPartners(p || []);
     setLoading(false);
   }
+
+  const PARTNER_STATUS = {
+    reviewing: { label: '審査中', color: '#d97706', bg: '#ffedd5' },
+    active: { label: '稼働中', color: '#059669', bg: 'rgba(16,185,129,0.12)' },
+    inactive: { label: '停止', color: '#94a3b8', bg: '#f1f5f9' },
+  };
+
+  // パートナー別サマリー
+  const partnerRows = useMemo(() => partners.map(p => {
+    const intro = leads.filter(x => x.partner_id === p.id).length + deals.filter(x => x.partner_id === p.id).length;
+    const reward = commissions.filter(c => c.partner_id === p.id && c.status !== 'cancelled').reduce((s, c) => s + Number(c.amount || 0), 0);
+    return { ...p, intro, reward };
+  }).sort((a, b) => b.reward - a.reward), [partners, leads, deals, commissions]);
+
+  // 全体の決済金額合計（入金確認済みの紹介金額）
+  const totalSales = useMemo(() => deals.filter(d => d.status === 'payment_confirmed').reduce((s, d) => s + Number(d.amount || 0), 0), [deals]);
 
   const stats = useMemo(() => {
     const introCount = leads.filter(x => isThisMonth(x.created_at)).length + deals.filter(x => isThisMonth(x.created_at)).length;
@@ -100,7 +117,8 @@ export default function Dashboard() {
           </div>
 
           <div className="glass-card" style={{ padding: '1.5rem' }}>
-            <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem' }}>お礼予定額の推移（直近6ヶ月）</h3>
+            <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.25rem' }}>お礼予定額の推移（直近6ヶ月）</h3>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>入金確認済みの紹介金額（決済金額）合計：<strong>{formatCurrency(totalSales)}</strong></p>
             <div style={{ height: '18rem' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
@@ -112,6 +130,42 @@ export default function Dashboard() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
+          </div>
+
+          {/* パートナー別ステータス一覧 */}
+          <div className="glass-card" style={{ padding: '1.5rem' }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem' }}>パートナー別ステータス</h3>
+            {partnerRows.length === 0 ? (
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>パートナーが登録されていません。</p>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      {['パートナー', 'ランク', 'ステータス', '紹介数', '累計お礼額'].map((h, i) => (
+                        <th key={h} style={{ padding: '0.6rem 0.8rem', textAlign: i >= 3 ? 'right' : 'left', fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-light)', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {partnerRows.map(p => {
+                      const s = PARTNER_STATUS[p.status] || PARTNER_STATUS.reviewing;
+                      return (
+                        <tr key={p.id}>
+                          <td style={{ padding: '0.6rem 0.8rem', fontSize: '0.85rem', fontWeight: 700, borderBottom: '1px solid var(--border-light)' }}>{p.name}</td>
+                          <td style={{ padding: '0.6rem 0.8rem', fontSize: '0.82rem', borderBottom: '1px solid var(--border-light)' }}>{p.partner_ranks?.name || '—'}</td>
+                          <td style={{ padding: '0.6rem 0.8rem', borderBottom: '1px solid var(--border-light)' }}>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.15rem 0.55rem', borderRadius: '9999px', background: s.bg, color: s.color }}>{s.label}</span>
+                          </td>
+                          <td style={{ padding: '0.6rem 0.8rem', fontSize: '0.85rem', textAlign: 'right', borderBottom: '1px solid var(--border-light)' }}>{p.intro} 件</td>
+                          <td style={{ padding: '0.6rem 0.8rem', fontSize: '0.85rem', fontWeight: 700, textAlign: 'right', borderBottom: '1px solid var(--border-light)' }}>{formatCurrency(p.reward)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </>
       )}

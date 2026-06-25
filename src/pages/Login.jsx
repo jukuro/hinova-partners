@@ -17,12 +17,12 @@ export default function Login() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const { signIn, user } = useAuth();
+  const { signIn, user, role } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user) navigate('/dashboard', { replace: true });
-  }, [user, navigate]);
+    if (user && role) navigate(role === 'partner' ? '/portal' : '/dashboard', { replace: true });
+  }, [user, role, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -31,9 +31,8 @@ export default function Login() {
     const { error: signInError } = await signIn(email, password);
     if (signInError) {
       setError(toJapaneseError(signInError));
-    } else {
-      navigate('/dashboard', { replace: true });
     }
+    // 成功時は user/role の更新を受けて上の useEffect がリダイレクト
     setLoading(false);
   };
 

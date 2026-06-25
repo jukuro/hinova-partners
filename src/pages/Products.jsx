@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useToast } from '../contexts/ToastContext';
 import { useConfirm } from '../hooks/useConfirm';
 import { formatCurrency } from '../lib/utils';
+import { calcReward, ROUNDING_LABEL } from '../lib/commission';
 import Modal from '../components/Modal';
 import { TableRowSkeleton } from '../components/Skeleton';
 import { Plus, Pencil, Trash2, Package } from 'lucide-react';
@@ -17,25 +18,18 @@ export const BUSINESS_OPTIONS = [
   { value: 'other', label: 'その他' },
 ];
 
-export const COMMISSION_TYPES = [
-  { value: 'fixed', label: '固定額（紹介お礼）' },
-  { value: 'rate', label: '売上率（％）' },
-  { value: 'recurring', label: '継続お礼（月額）' },
+export const ROUNDING_OPTIONS = [
+  { value: 'floor_10', label: '10円切り捨て' },
+  { value: 'floor_100', label: '100円切り捨て' },
+  { value: 'round', label: '四捨五入' },
 ];
 
 export const businessLabel = (v) => BUSINESS_OPTIONS.find(b => b.value === v)?.label || '—';
 
-export const formatCommission = (type, value) => {
-  if (value == null || value === '') return '未設定';
-  if (type === 'fixed') return `${formatCurrency(value)}`;
-  if (type === 'rate') return `${value}%`;
-  if (type === 'recurring') return `${formatCurrency(value)}/月`;
-  return String(value);
-};
-
 const emptyForm = {
   name: '', business: 'hinova_biz', unit_price: '',
-  commission_type: 'fixed', commission_value: '', description: '', is_active: true,
+  base_reward_rate: '', max_reward_rate: '', rounding_rule: 'floor_10',
+  description: '', is_active: true,
 };
 
 const th = { padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-light)', whiteSpace: 'nowrap' };
@@ -68,9 +62,11 @@ export default function Products() {
     setEditingId(p.id);
     setFormData({
       name: p.name || '', business: p.business || 'hinova_biz',
-      unit_price: p.unit_price ?? '', commission_type: p.commission_type || 'fixed',
-      commission_value: p.commission_value ?? '', description: p.description || '',
-      is_active: p.is_active ?? true,
+      unit_price: p.unit_price ?? '',
+      base_reward_rate: p.base_reward_rate ?? '',
+      max_reward_rate: p.max_reward_rate ?? '',
+      rounding_rule: p.rounding_rule || 'floor_10',
+      description: p.description || '', is_active: p.is_active ?? true,
     });
     setIsModalOpen(true);
   };
@@ -82,8 +78,9 @@ export default function Products() {
       name: formData.name.trim(),
       business: formData.business,
       unit_price: formData.unit_price === '' ? null : Number(formData.unit_price),
-      commission_type: formData.commission_type,
-      commission_value: formData.commission_value === '' ? null : Number(formData.commission_value),
+      base_reward_rate: formData.base_reward_rate === '' ? null : Number(formData.base_reward_rate),
+      max_reward_rate: formData.max_reward_rate === '' ? null : Number(formData.max_reward_rate),
+      rounding_rule: formData.rounding_rule,
       description: formData.description.trim() || null,
       is_active: formData.is_active,
     };
@@ -109,12 +106,21 @@ export default function Products() {
     fetchProducts();
   };
 
+  // お礼目安（基本報酬率での概算）
+  const estimateFor = (p) => {
+    if (p.unit_price == null || p.base_reward_rate == null) return null;
+    return calcReward(p.unit_price, p.base_reward_rate, p.rounding_rule || 'floor_10').final;
+  };
+  const previewEstimate = formData.unit_price !== '' && formData.base_reward_rate !== ''
+    ? calcReward(Number(formData.unit_price), Number(formData.base_reward_rate), formData.rounding_rule)
+    : null;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       <div className="page-header">
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>商材管理</h1>
-          <p className="page-header-desc">紹介できる商材と、紹介してくれた方へのお礼ルールを設定します。</p>
+          <p className="page-header-desc">紹介できる商材と、紹介してくれた方へのお礼（報酬率）を設定します。</p>
         </div>
         <button className="btn btn-primary" onClick={openNew} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
           <Plus size={18} /> 商材を登録
@@ -128,37 +134,47 @@ export default function Products() {
               <tr>
                 <th style={th}>商材名</th>
                 <th style={th}>事業</th>
-                <th style={th}>単価</th>
-                <th style={th}>お礼</th>
+                <th style={th}>月額</th>
+                <th style={th}>基本報酬率</th>
+                <th style={th}>お礼目安</th>
+                <th style={th}>端数処理</th>
                 <th style={th}>状態</th>
                 <th style={{ ...th, textAlign: 'right' }}>操作</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <TableRowSkeleton cols={6} rows={5} />
+                <TableRowSkeleton cols={8} rows={5} />
               ) : products.length === 0 ? (
-                <tr><td style={{ ...td, textAlign: 'center', color: 'var(--text-muted)', padding: '2.5rem' }} colSpan={6}>
+                <tr><td style={{ ...td, textAlign: 'center', color: 'var(--text-muted)', padding: '2.5rem' }} colSpan={8}>
                   <Package size={28} style={{ opacity: 0.4, marginBottom: '0.5rem' }} /><br />
                   商材がまだ登録されていません。
                 </td></tr>
-              ) : products.map(p => (
-                <tr key={p.id}>
-                  <td style={{ ...td, fontWeight: 700 }}>{p.name}</td>
-                  <td style={td}>{businessLabel(p.business)}</td>
-                  <td style={td}>{p.unit_price != null ? formatCurrency(p.unit_price) : '—'}</td>
-                  <td style={td}>{formatCommission(p.commission_type, p.commission_value)}</td>
-                  <td style={td}>
-                    <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.15rem 0.55rem', borderRadius: '9999px', background: p.is_active ? 'rgba(16,185,129,0.12)' : '#f1f5f9', color: p.is_active ? '#059669' : '#94a3b8' }}>
-                      {p.is_active ? '有効' : '停止中'}
-                    </span>
-                  </td>
-                  <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <button className="btn btn-secondary" onClick={() => openEdit(p)} style={{ padding: '0.35rem 0.6rem', marginRight: '0.4rem' }}><Pencil size={15} /></button>
-                    <button className="btn btn-danger" onClick={() => handleDelete(p)} style={{ padding: '0.35rem 0.6rem' }}><Trash2 size={15} /></button>
-                  </td>
-                </tr>
-              ))}
+              ) : products.map(p => {
+                const est = estimateFor(p);
+                return (
+                  <tr key={p.id}>
+                    <td style={{ ...td, fontWeight: 700 }}>{p.name}</td>
+                    <td style={td}>{businessLabel(p.business)}</td>
+                    <td style={td}>{p.unit_price != null ? formatCurrency(p.unit_price) : '—'}</td>
+                    <td style={td}>
+                      {p.base_reward_rate != null ? `${p.base_reward_rate}%` : <span style={{ color: '#dc2626', fontSize: '0.78rem' }}>未設定</span>}
+                      {p.max_reward_rate != null && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>（上限{p.max_reward_rate}%）</span>}
+                    </td>
+                    <td style={{ ...td, fontWeight: 700 }}>{est != null ? formatCurrency(est) : '—'}</td>
+                    <td style={td}><span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{ROUNDING_LABEL[p.rounding_rule || 'floor_10']}</span></td>
+                    <td style={td}>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.15rem 0.55rem', borderRadius: '9999px', background: p.is_active ? 'rgba(16,185,129,0.12)' : '#f1f5f9', color: p.is_active ? '#059669' : '#94a3b8' }}>
+                        {p.is_active ? '有効' : '停止中'}
+                      </span>
+                    </td>
+                    <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button className="btn btn-secondary" onClick={() => openEdit(p)} style={{ padding: '0.35rem 0.6rem', marginRight: '0.4rem' }}><Pencil size={15} /></button>
+                      <button className="btn btn-danger" onClick={() => handleDelete(p)} style={{ padding: '0.35rem 0.6rem' }}><Trash2 size={15} /></button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -177,21 +193,35 @@ export default function Products() {
             </select>
           </div>
           <div className="form-group">
-            <label className="form-label">単価（任意）</label>
-            <input className="form-input" type="number" min="0" value={formData.unit_price} onChange={e => setFormData({ ...formData, unit_price: e.target.value })} placeholder="例: 980" />
+            <label className="form-label">月額（円）</label>
+            <input className="form-input" type="number" min="0" value={formData.unit_price} onChange={e => setFormData({ ...formData, unit_price: e.target.value })} placeholder="例: 2980" />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div className="form-group">
-              <label className="form-label">お礼タイプ</label>
-              <select className="form-select" value={formData.commission_type} onChange={e => setFormData({ ...formData, commission_type: e.target.value })}>
-                {COMMISSION_TYPES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </select>
+              <label className="form-label">基本報酬率（%）</label>
+              <input className="form-input" type="number" min="0" step="0.1" value={formData.base_reward_rate} onChange={e => setFormData({ ...formData, base_reward_rate: e.target.value })} placeholder="例: 17" />
             </div>
             <div className="form-group">
-              <label className="form-label">{formData.commission_type === 'rate' ? 'お礼率（%）' : 'お礼額（円）'}</label>
-              <input className="form-input" type="number" min="0" value={formData.commission_value} onChange={e => setFormData({ ...formData, commission_value: e.target.value })} placeholder={formData.commission_type === 'rate' ? '例: 10' : '例: 1000'} />
+              <label className="form-label">最大報酬率（%・任意）</label>
+              <input className="form-input" type="number" min="0" step="0.1" value={formData.max_reward_rate} onChange={e => setFormData({ ...formData, max_reward_rate: e.target.value })} placeholder="上限なしは空欄" />
             </div>
           </div>
+          <div className="form-group">
+            <label className="form-label">端数処理</label>
+            <select className="form-select" value={formData.rounding_rule} onChange={e => setFormData({ ...formData, rounding_rule: e.target.value })}>
+              {ROUNDING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+
+          {previewEstimate && previewEstimate.final != null && (
+            <div style={{ background: 'rgba(232,184,0,0.08)', border: '1px solid rgba(232,184,0,0.3)', borderRadius: '0.6rem', padding: '0.75rem 1rem', fontSize: '0.85rem' }}>
+              <strong>お礼目安：</strong> {formatCurrency(Number(formData.unit_price))} × {formData.base_reward_rate}%
+              = {Math.round(previewEstimate.raw).toLocaleString()}円
+              → <strong style={{ color: '#b45309' }}>{formatCurrency(previewEstimate.final)}</strong>
+              <span style={{ color: 'var(--text-muted)', marginLeft: '0.4rem' }}>（{ROUNDING_LABEL[formData.rounding_rule]}・基本報酬率時）</span>
+            </div>
+          )}
+
           <div className="form-group">
             <label className="form-label">説明（任意）</label>
             <textarea className="form-input" rows={2} value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} />

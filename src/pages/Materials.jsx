@@ -18,7 +18,7 @@ const MATERIAL_CATEGORIES = [
 ];
 const categoryLabel = (v) => MATERIAL_CATEGORIES.find(c => c.value === v)?.label || '—';
 
-const emptyForm = { title: '', category: 'intro', business: '', file_url: '', description: '', is_public: true };
+const emptyForm = { title: '', category: 'intro', business: '', file_url: '', description: '', is_public: true, min_rank_sort: '' };
 
 const th = { padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-light)', whiteSpace: 'nowrap' };
 const td = { padding: '0.85rem 1rem', fontSize: '0.875rem', borderBottom: '1px solid var(--border-light)', verticalAlign: 'middle' };
@@ -27,6 +27,7 @@ export default function Materials() {
   const toast = useToast();
   const confirm = useConfirm();
   const [materials, setMaterials] = useState([]);
+  const [ranks, setRanks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -37,10 +38,20 @@ export default function Materials() {
 
   async function fetchAll() {
     setLoading(true);
-    const { data } = await supabase.from('materials').select('*').order('created_at', { ascending: false });
+    const [{ data }, { data: rData }] = await Promise.all([
+      supabase.from('materials').select('*').order('created_at', { ascending: false }),
+      supabase.from('partner_ranks').select('*').order('sort_order'),
+    ]);
     if (data) setMaterials(data);
+    if (rData) setRanks(rData);
     setLoading(false);
   }
+
+  const rankLabel = (sort) => {
+    if (sort == null) return '全員';
+    const r = ranks.find(x => x.sort_order === Number(sort));
+    return r ? `${r.name}以上` : `ランク${sort}以上`;
+  };
 
   const openNew = () => { setEditingId(null); setFormData(emptyForm); setIsModalOpen(true); };
   const openEdit = (m) => {
@@ -48,6 +59,7 @@ export default function Materials() {
     setFormData({
       title: m.title || '', category: m.category || 'intro', business: m.business || '',
       file_url: m.file_url || '', description: m.description || '', is_public: m.is_public ?? true,
+      min_rank_sort: m.min_rank_sort ?? '',
     });
     setIsModalOpen(true);
   };
@@ -59,6 +71,7 @@ export default function Materials() {
       title: formData.title.trim(), category: formData.category,
       business: formData.business || null, file_url: formData.file_url.trim() || null,
       description: formData.description.trim() || null, is_public: formData.is_public,
+      min_rank_sort: formData.min_rank_sort === '' ? null : Number(formData.min_rank_sort),
     };
     const { error } = editingId
       ? await supabase.from('materials').update(payload).eq('id', editingId)
@@ -99,6 +112,7 @@ export default function Materials() {
                 <th style={th}>タイトル</th>
                 <th style={th}>カテゴリ</th>
                 <th style={th}>事業</th>
+                <th style={th}>公開ランク</th>
                 <th style={th}>公開</th>
                 <th style={{ ...th, textAlign: 'right' }}>操作</th>
               </tr>
@@ -107,7 +121,7 @@ export default function Materials() {
               {loading ? (
                 <TableRowSkeleton cols={5} rows={5} />
               ) : materials.length === 0 ? (
-                <tr><td style={{ ...td, textAlign: 'center', color: 'var(--text-muted)', padding: '2.5rem' }} colSpan={5}>
+                <tr><td style={{ ...td, textAlign: 'center', color: 'var(--text-muted)', padding: '2.5rem' }} colSpan={6}>
                   <FileText size={28} style={{ opacity: 0.4, marginBottom: '0.5rem' }} /><br />
                   資料がまだ登録されていません。
                 </td></tr>
@@ -123,6 +137,7 @@ export default function Materials() {
                   </td>
                   <td style={td}>{categoryLabel(m.category)}</td>
                   <td style={td}>{m.business ? businessLabel(m.business) : '共通'}</td>
+                  <td style={td}><span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{rankLabel(m.min_rank_sort)}</span></td>
                   <td style={td}>
                     <span style={{ fontSize: '0.72rem', fontWeight: 700, color: m.is_public ? '#059669' : '#94a3b8' }}>{m.is_public ? '公開' : '非公開'}</span>
                   </td>
@@ -157,6 +172,13 @@ export default function Materials() {
                 {BUSINESS_OPTIONS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
               </select>
             </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">公開ランク（このランク以上で閲覧可）</label>
+            <select className="form-select" value={formData.min_rank_sort} onChange={e => setFormData({ ...formData, min_rank_sort: e.target.value })}>
+              <option value="">全員（制限なし）</option>
+              {ranks.map(r => <option key={r.id} value={r.sort_order}>{r.name}以上</option>)}
+            </select>
           </div>
           <div className="form-group">
             <label className="form-label">資料のURL（Google Drive・LP・PDFなど）</label>

@@ -2,13 +2,14 @@ import React from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import {
-  LayoutDashboard, Users, Package, Send, ClipboardList,
+  LayoutDashboard, Users, Award, Package, Send, ClipboardList,
   Coins, FileText, Settings, LogOut,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'ダッシュボード' },
   { to: '/partners', icon: Users, label: 'パートナー' },
+  { to: '/ranks', icon: Award, label: 'ランク' },
   { to: '/products', icon: Package, label: '商材' },
   { to: '/leads', icon: Send, label: 'かんたん紹介' },
   { to: '/deals', icon: ClipboardList, label: '紹介状況' },
@@ -20,6 +21,7 @@ const NAV_ITEMS = [
 const PAGE_TITLES = {
   '/dashboard': 'ダッシュボード',
   '/partners': 'パートナー管理',
+  '/ranks': 'ランク管理',
   '/products': '商材管理',
   '/leads': 'かんたん紹介',
   '/deals': '紹介状況',

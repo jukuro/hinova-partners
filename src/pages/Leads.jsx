@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../contexts/ToastContext';
 import { useConfirm } from '../hooks/useConfirm';
-import { resolveCommissionAmount, currentPaymentMonth } from '../lib/commission';
+import { resolveRewardRate, calcReward, currentPaymentMonth } from '../lib/commission';
 import Modal from '../components/Modal';
 import { TableRowSkeleton } from '../components/Skeleton';
 import { Plus, Trash2, Send } from 'lucide-react';
@@ -15,7 +15,7 @@ const LEAD_STATUS = [
 ];
 const statusInfo = (v) => LEAD_STATUS.find(s => s.value === v) || LEAD_STATUS[0];
 
-const emptyForm = { partner_id: '', product_id: '', customer_name: '', customer_contact: '', ok_to_contact: true, memo: '' };
+const emptyForm = { partner_id: '', product_ids: [], customer_name: '', customer_contact: '', ok_to_contact: true, memo: '' };
 
 const th = { padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-light)', whiteSpace: 'nowrap' };
 const td = { padding: '0.85rem 1rem', fontSize: '0.875rem', borderBottom: '1px solid var(--border-light)', verticalAlign: 'middle' };
@@ -51,21 +51,30 @@ export default function Leads() {
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
-    const payload = {
+    const base = {
       partner_id: formData.partner_id || null,
-      product_id: formData.product_id || null,
       customer_name: formData.customer_name.trim(),
       customer_contact: formData.customer_contact.trim() || null,
       ok_to_contact: formData.ok_to_contact,
       memo: formData.memo.trim() || null,
     };
-    const { error } = await supabase.from('leads').insert([payload]);
+    // 商材を複数選んだ場合は商材ごとに1件ずつ作成（fan-out）。未選択なら商材なしで1件。
+    const ids = formData.product_ids.length ? formData.product_ids : [null];
+    const rows = ids.map(pid => ({ ...base, product_id: pid }));
+    const { error } = await supabase.from('leads').insert(rows);
     setSaving(false);
     if (error) { toast.error('登録に失敗しました: ' + error.message); return; }
-    toast.success('紹介を受け付けました');
+    toast.success(rows.length > 1 ? `${rows.length}件の紹介を受け付けました` : '紹介を受け付けました');
     setIsModalOpen(false);
     fetchAll();
   };
+
+  const toggleProduct = (pid) => setFormData(prev => ({
+    ...prev,
+    product_ids: prev.product_ids.includes(pid)
+      ? prev.product_ids.filter(x => x !== pid)
+      : [...prev.product_ids, pid],
+  }));
 
   const handleStatusChange = async (lead, newStatus) => {
     const { error } = await supabase.from('leads').update({ status: newStatus }).eq('id', lead.id);
@@ -74,12 +83,22 @@ export default function Leads() {
     if (newStatus === 'started') {
       const { data: existing } = await supabase.from('commissions').select('id').eq('lead_id', lead.id).maybeSingle();
       if (!existing) {
-        const { amount, commission_type } = await resolveCommissionAmount(lead.partner_id, lead.product_id, null);
+        const { data: product } = lead.product_id
+          ? await supabase.from('products').select('*').eq('id', lead.product_id).maybeSingle()
+          : { data: null };
+        const resolved = await resolveRewardRate(lead.partner_id, lead.product_id);
+        const payAmount = product?.unit_price != null ? Number(product.unit_price) : null;
+        const rule = product?.rounding_rule || 'floor_10';
+        const { raw, final } = calcReward(payAmount, resolved.rate, rule);
         await supabase.from('commissions').insert([{
-          lead_id: lead.id, partner_id: lead.partner_id, amount, commission_type,
-          payment_month: currentPaymentMonth(), status: amount != null ? 'confirmed' : 'pending',
+          lead_id: lead.id, partner_id: lead.partner_id,
+          product_id: lead.product_id || null, product_name: product?.name || null,
+          customer_name: lead.customer_name || null,
+          payment_amount: payAmount, applied_rate: resolved.rate, amount: final,
+          calculation_basis: { ...resolved, rounding_rule: rule, raw_amount: raw, final_amount: final, locked_at: new Date().toISOString().slice(0, 10) },
+          payment_month: currentPaymentMonth(), status: 'pending',
         }]);
-        toast.success(amount != null ? `お礼額（${Math.round(amount).toLocaleString()}円）を作成しました` : 'お礼額を作成しました（金額は管理者確認待ち）');
+        toast.success(final != null ? `お礼額（${Number(final).toLocaleString()}円）を作成しました` : 'お礼額を作成しました（商材の月額・報酬率を確認してください）');
       }
     }
     fetchAll();
@@ -166,21 +185,30 @@ export default function Leads() {
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="紹介を追加">
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div className="form-group">
-              <label className="form-label">パートナー</label>
-              <select className="form-select" value={formData.partner_id} onChange={e => setFormData({ ...formData, partner_id: e.target.value })}>
-                <option value="">（未選択）</option>
-                {partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">紹介する商材</label>
-              <select className="form-select" value={formData.product_id} onChange={e => setFormData({ ...formData, product_id: e.target.value })}>
-                <option value="">（未選択）</option>
-                {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
+          <div className="form-group">
+            <label className="form-label">パートナー</label>
+            <select className="form-select" value={formData.partner_id} onChange={e => setFormData({ ...formData, partner_id: e.target.value })}>
+              <option value="">（未選択）</option>
+              {partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">紹介する商材（複数選択可）</label>
+            {products.length === 0 ? (
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>商材が登録されていません。</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', border: '1px solid var(--border-light)', borderRadius: '0.6rem', padding: '0.6rem 0.75rem', maxHeight: '11rem', overflowY: 'auto' }}>
+                {products.map(p => (
+                  <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', fontWeight: 500 }}>
+                    <input type="checkbox" checked={formData.product_ids.includes(p.id)} onChange={() => toggleProduct(p.id)} style={{ accentColor: '#e8b800' }} />
+                    {p.name}
+                  </label>
+                ))}
+              </div>
+            )}
+            {formData.product_ids.length > 1 && (
+              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>商材ごとに1件ずつ紹介として登録されます（{formData.product_ids.length}件）。</p>
+            )}
           </div>
           <div className="form-group">
             <label className="form-label">紹介先の名前 *</label>

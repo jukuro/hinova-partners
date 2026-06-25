@@ -1,6 +1,9 @@
 import React from 'react';
 
-// ─── 基本スケルトンブロック ────────────────────────────────────────
+const CHART_SKELETON_HEIGHTS = [42, 58, 35, 72, 50, 64, 46, 80, 55, 68, 38, 60];
+const TABLE_SKELETON_WIDTHS = [72, 58, 84, 66, 76, 52];
+
+// 隨渉隨渉隨渉 陜難ｽｺ隴幢ｽｬ郢ｧ・ｹ郢ｧ・ｱ郢晢ｽｫ郢晏現ﾎｦ郢晄じﾎ溽ｹ昴・縺・隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉
 export function SkeletonBlock({ width = '100%', height = '1rem', rounded = 'md', className = '' }) {
   const radiusMap = { sm: '0.375rem', md: '0.5rem', lg: '1rem', full: '9999px' };
   return (
@@ -11,7 +14,7 @@ export function SkeletonBlock({ width = '100%', height = '1rem', rounded = 'md',
   );
 }
 
-// ─── ダッシュボード用：統計カード4枚 ─────────────────────────────────
+// 隨渉隨渉隨渉 郢敖郢昴・縺咏ｹ晢ｽ･郢晄㈱繝ｻ郢晁・逡代・螟ゑｽｵ・ｱ髫ｪ蛹ｻ縺咲ｹ晢ｽｼ郢昴・隴ｫ繝ｻ隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉
 export function StatCardsSkeleton() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -31,7 +34,7 @@ export function StatCardsSkeleton() {
   );
 }
 
-// ─── ダッシュボード用：グラフカード ──────────────────────────────────
+// 隨渉隨渉隨渉 郢敖郢昴・縺咏ｹ晢ｽ･郢晄㈱繝ｻ郢晁・逡代・螢ｹ縺堤ｹ晢ｽｩ郢晁ｼ斐″郢晢ｽｼ郢昴・隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉
 export function ChartSkeleton({ height = '18rem' }) {
   return (
     <div className="glass-card p-6">
@@ -41,7 +44,7 @@ export function ChartSkeleton({ height = '18rem' }) {
           <div key={i} className="flex-1 flex flex-col gap-1 justify-end">
             <SkeletonBlock
               width="100%"
-              height={`${30 + Math.sin(i) * 20 + Math.random() * 30}%`}
+              height={`${CHART_SKELETON_HEIGHTS[i % CHART_SKELETON_HEIGHTS.length]}%`}
               rounded="sm"
             />
           </div>
@@ -51,7 +54,7 @@ export function ChartSkeleton({ height = '18rem' }) {
   );
 }
 
-// ─── テーブル用：行スケルトン ─────────────────────────────────────────
+// 隨渉隨渉隨渉 郢昴・繝ｻ郢晄じﾎ晞包ｽｨ繝ｻ螟奇ｽ｡蠕後○郢ｧ・ｱ郢晢ｽｫ郢晏現ﾎｦ 隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉
 export function TableRowSkeleton({ cols = 6, rows = 5 }) {
   return (
     <>
@@ -60,7 +63,7 @@ export function TableRowSkeleton({ cols = 6, rows = 5 }) {
           {[...Array(cols)].map((_, j) => (
             <td key={j} style={{ padding: '1rem 1.25rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
               <SkeletonBlock
-                width={j === 0 ? '5rem' : j === cols - 1 ? '4rem' : `${50 + Math.random() * 40}%`}
+                width={j === 0 ? '5rem' : j === cols - 1 ? '4rem' : `${TABLE_SKELETON_WIDTHS[(i + j) % TABLE_SKELETON_WIDTHS.length]}%`}
                 height="0.875rem"
               />
             </td>
@@ -71,7 +74,7 @@ export function TableRowSkeleton({ cols = 6, rows = 5 }) {
   );
 }
 
-// ─── カードリスト用：アクティビティ行 ────────────────────────────────
+// 隨渉隨渉隨渉 郢ｧ・ｫ郢晢ｽｼ郢晏ｳｨﾎ懃ｹｧ・ｹ郢晁ご逡代・螢ｹ縺・ｹｧ・ｯ郢昴・縺・ｹ晁侭繝ｦ郢ｧ・｣髯ｦ繝ｻ隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉隨渉
 export function ActivitySkeleton({ rows = 5 }) {
   return (
     <div className="flex flex-col gap-4">
