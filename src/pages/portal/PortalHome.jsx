@@ -10,6 +10,8 @@ const isThisMonth = (d) => {
   const x = new Date(d), n = new Date();
   return x.getFullYear() === n.getFullYear() && x.getMonth() === n.getMonth();
 };
+// 契約（有料登録）とみなすステータス（新・旧両対応）
+const CONTRACTED = ['contracted', 'started', 'payment_confirmed'];
 
 export default function PortalHome() {
   const { partner } = useAuth();
@@ -24,8 +26,8 @@ export default function PortalHome() {
     (async () => {
       const [{ data: rData }, { data: lData }, { data: dData }, { data: cData }] = await Promise.all([
         partner.rank_id ? supabase.from('partner_ranks').select('*').eq('id', partner.rank_id).maybeSingle() : Promise.resolve({ data: null }),
-        supabase.from('leads').select('created_at').eq('partner_id', partner.id),
-        supabase.from('deals').select('created_at, status').eq('partner_id', partner.id),
+        supabase.from('leads').select('created_at, status, customer_name').eq('partner_id', partner.id),
+        supabase.from('deals').select('created_at, status, customer_name').eq('partner_id', partner.id),
         supabase.from('commissions').select('amount, status, payment_month').eq('partner_id', partner.id),
       ]);
       setRank(rData);
@@ -36,9 +38,15 @@ export default function PortalHome() {
   }, [partner]);
 
   const stats = useMemo(() => {
-    const introCount = leads.filter(x => isThisMonth(x.created_at)).length + deals.filter(x => isThisMonth(x.created_at)).length;
+    const all = [...leads, ...deals];
+    // 紹介した人数（同じ人への複数サービスは1人）：今月分
+    const peopleThisMonth = new Set(
+      all.filter(x => isThisMonth(x.created_at)).map(x => (x.customer_name || '').trim()).filter(Boolean)
+    ).size;
+    // 契約数（有料登録に至った件数・累計）
+    const contractedCount = all.filter(x => CONTRACTED.includes(x.status)).length;
     const pending = commissions.filter(c => c.status !== 'cancelled' && c.status !== 'paid').reduce((s, c) => s + Number(c.amount || 0), 0);
-    return { introCount, pending };
+    return { peopleThisMonth, contractedCount, pending };
   }, [leads, deals, commissions]);
 
   return (
@@ -59,12 +67,16 @@ export default function PortalHome() {
       {/* KPI */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
         <div className="glass-card" style={{ padding: '1rem' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>今月の紹介数</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800, marginTop: '0.2rem' }}>{stats.introCount} 件</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>今月の紹介（人数）</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, marginTop: '0.2rem' }}>{stats.peopleThisMonth} 人</div>
         </div>
-        <div className="glass-card" style={{ padding: '1rem' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>お礼予定額</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800, marginTop: '0.2rem' }}>{formatCurrency(stats.pending)}</div>
+        <div className="glass-card" style={{ padding: '1rem', borderTop: '3px solid #059669' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>契約数（累計）</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, marginTop: '0.2rem', color: '#059669' }}>{stats.contractedCount} 件</div>
+        </div>
+        <div className="glass-card" style={{ padding: '1rem', gridColumn: '1 / -1' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>お礼予定額（未払い）</div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '0.2rem' }}>{formatCurrency(stats.pending)}</div>
         </div>
       </div>
 
