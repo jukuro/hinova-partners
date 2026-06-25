@@ -35,7 +35,7 @@ export const businessLabel = (v) => BUSINESS_OPTIONS.find(b => b.value === v)?.l
 const emptyForm = {
   name: '', business: 'hinova_biz', unit_price: '',
   base_reward_rate: '', max_reward_rate: '', rounding_rule: 'floor_10',
-  detection_method: 'manual', description: '', is_active: true,
+  detection_method: 'manual', lp_url: '', description: '', is_active: true,
 };
 
 const th = { padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-light)', whiteSpace: 'nowrap' };
@@ -73,6 +73,7 @@ export default function Products() {
       max_reward_rate: p.max_reward_rate ?? '',
       rounding_rule: p.rounding_rule || 'floor_10',
       detection_method: p.detection_method || 'manual',
+      lp_url: p.lp_url || '',
       description: p.description || '', is_active: p.is_active ?? true,
     });
     setIsModalOpen(true);
@@ -89,6 +90,7 @@ export default function Products() {
       max_reward_rate: formData.max_reward_rate === '' ? null : Number(formData.max_reward_rate),
       rounding_rule: formData.rounding_rule,
       detection_method: formData.detection_method,
+      lp_url: formData.lp_url.trim() || null,
       description: formData.description.trim() || null,
       is_active: formData.is_active,
     };
@@ -243,6 +245,11 @@ export default function Products() {
             </div>
           )}
 
+          <div className="form-group">
+            <label className="form-label">LP（ランディングページ）URL</label>
+            <input className="form-input" value={formData.lp_url} onChange={e => setFormData({ ...formData, lp_url: e.target.value })} placeholder="https://..." />
+            <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>パートナーの紹介リンクは、このURLに紹介コード（?ref=）を付けて送られます。</p>
+          </div>
           <div className="form-group">
             <label className="form-label">説明（任意）</label>
             <textarea className="form-input" rows={2} value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} />
