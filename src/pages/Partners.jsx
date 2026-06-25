@@ -39,7 +39,7 @@ export default function Partners() {
   const toast = useToast();
   const confirm = useConfirm();
   const [partners, setPartners] = useState([]);
-  const [products, setProducts] = useState([]);
+  const [services, setServices] = useState([]);
   const [ranks, setRanks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -52,26 +52,25 @@ export default function Partners() {
 
   async function fetchAll() {
     setLoading(true);
-    const [{ data: pData }, { data: prodData }, { data: rData }] = await Promise.all([
-      supabase.from('partners').select('*, partner_products(product_id), partner_ranks(name, rate_addition)').order('created_at', { ascending: false }),
-      supabase.from('products').select('*, services(name)').eq('is_active', true).order('created_at'),
+    const [{ data: pData }, { data: sData }, { data: rData }] = await Promise.all([
+      supabase.from('partners').select('*, partner_products(service_id), partner_ranks(name, rate_addition)').order('created_at', { ascending: false }),
+      supabase.from('services').select('*').eq('is_active', true).order('sort_order').order('created_at'),
       supabase.from('partner_ranks').select('*').order('sort_order'),
     ]);
     if (pData) setPartners(pData);
-    if (prodData) setProducts(prodData);
+    if (sData) setServices(sData);
     if (rData) setRanks(rData);
     setLoading(false);
   }
 
+  // 担当・個別報酬率は商材（サービス）単位
   const buildRows = (assigned = {}, overrides = {}) =>
-    products.map(p => ({
-      productId: p.id,
-      name: `${p.services?.name || ''} ${p.name}`.trim(),
-      business: p.business,
-      base_reward_rate: p.base_reward_rate,
-      checked: !!assigned[p.id],
-      override: overrides[p.id] != null,
-      custom_rate: overrides[p.id] ?? '',
+    services.map(s => ({
+      serviceId: s.id,
+      name: s.name,
+      checked: !!assigned[s.id],
+      override: overrides[s.id] != null,
+      custom_rate: overrides[s.id] ?? '',
     }));
 
   const defaultRankId = () => ranks.find(r => r.slug === 'partner')?.id || ranks[0]?.id || '';
@@ -93,19 +92,19 @@ export default function Partners() {
       note: p.note || '', is_active: p.is_active ?? true,
     });
     const [{ data: pp }, { data: pcr }] = await Promise.all([
-      supabase.from('partner_products').select('product_id').eq('partner_id', p.id),
-      supabase.from('partner_commission_rules').select('product_id, custom_rate').eq('partner_id', p.id),
+      supabase.from('partner_products').select('service_id').eq('partner_id', p.id),
+      supabase.from('partner_commission_rules').select('service_id, custom_rate').eq('partner_id', p.id),
     ]);
     const assigned = {};
-    (pp || []).forEach(r => { assigned[r.product_id] = true; });
+    (pp || []).forEach(r => { if (r.service_id) assigned[r.service_id] = true; });
     const overrides = {};
-    (pcr || []).forEach(r => { if (r.custom_rate != null) overrides[r.product_id] = r.custom_rate; });
+    (pcr || []).forEach(r => { if (r.service_id && r.custom_rate != null) overrides[r.service_id] = r.custom_rate; });
     setRows(buildRows(assigned, overrides));
     setIsModalOpen(true);
   };
 
-  const updateRow = (productId, patch) =>
-    setRows(prev => prev.map(r => r.productId === productId ? { ...r, ...patch } : r));
+  const updateRow = (serviceId, patch) =>
+    setRows(prev => prev.map(r => r.serviceId === serviceId ? { ...r, ...patch } : r));
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -138,13 +137,13 @@ export default function Partners() {
     const checkedRows = rows.filter(r => r.checked);
     if (checkedRows.length) {
       await supabase.from('partner_products').insert(
-        checkedRows.map(r => ({ partner_id: partnerId, product_id: r.productId }))
+        checkedRows.map(r => ({ partner_id: partnerId, service_id: r.serviceId }))
       );
       const overrideRows = checkedRows.filter(r => r.override && r.custom_rate !== '');
       if (overrideRows.length) {
         await supabase.from('partner_commission_rules').insert(
           overrideRows.map(r => ({
-            partner_id: partnerId, product_id: r.productId,
+            partner_id: partnerId, service_id: r.serviceId,
             custom_rate: Number(r.custom_rate),
           }))
         );
@@ -395,31 +394,28 @@ export default function Partners() {
             <textarea className="form-input" rows={2} value={formData.note} onChange={e => setFormData({ ...formData, note: e.target.value })} />
           </div>
 
-          {/* 担当商材＋個別報酬率 */}
+          {/* 担当商材＋個別報酬率（商材単位） */}
           <div>
             <label className="form-label" style={{ marginBottom: '0.5rem', display: 'block' }}>紹介できる商材と個別報酬率</label>
-            {products.length === 0 ? (
+            {services.length === 0 ? (
               <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>先に「商材管理」で商材を登録してください。</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', border: '1px solid var(--border-light)', borderRadius: '0.6rem', padding: '0.75rem' }}>
                 {rows.map(r => (
-                  <div key={r.productId} style={{ borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem' }}>
+                  <div key={r.serviceId} style={{ borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', fontWeight: 600 }}>
-                      <input type="checkbox" checked={r.checked} onChange={e => updateRow(r.productId, { checked: e.target.checked })} style={{ accentColor: '#e8b800' }} />
+                      <input type="checkbox" checked={r.checked} onChange={e => updateRow(r.serviceId, { checked: e.target.checked })} style={{ accentColor: '#e8b800' }} />
                       {r.name}
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 500 }}>
-                        （{businessLabel(r.business)}{r.base_reward_rate != null ? ` / 基本${r.base_reward_rate}%` : ''}）
-                      </span>
                     </label>
                     {r.checked && (
                       <div style={{ marginLeft: '1.5rem', marginTop: '0.4rem' }}>
                         <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                          <input type="checkbox" checked={r.override} onChange={e => updateRow(r.productId, { override: e.target.checked })} style={{ accentColor: '#e8b800' }} />
-                          このパートナーだけ報酬率を個別設定する（ランクより優先）
+                          <input type="checkbox" checked={r.override} onChange={e => updateRow(r.serviceId, { override: e.target.checked })} style={{ accentColor: '#e8b800' }} />
+                          この商材だけ報酬率を個別設定する（ランクより優先・全プラン共通）
                         </label>
                         {r.override && (
                           <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.4rem' }}>
-                            <input className="form-input" type="number" min="0" step="0.1" placeholder="率" value={r.custom_rate} onChange={e => updateRow(r.productId, { custom_rate: e.target.value })} style={{ width: '6rem' }} />
+                            <input className="form-input" type="number" min="0" step="0.1" placeholder="率" value={r.custom_rate} onChange={e => updateRow(r.serviceId, { custom_rate: e.target.value })} style={{ width: '6rem' }} />
                             <span style={{ fontSize: '0.85rem' }}>%</span>
                           </div>
                         )}

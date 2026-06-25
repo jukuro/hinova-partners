@@ -6,17 +6,27 @@ import {
   Coins, FileText, Settings, LogOut, Menu, X,
 } from 'lucide-react';
 
-const NAV_ITEMS = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'ダッシュボード' },
-  { to: '/partners', icon: Users, label: 'パートナー' },
-  { to: '/customers', icon: UserRound, label: '顧客' },
-  { to: '/ranks', icon: Award, label: 'ランク' },
-  { to: '/products', icon: Package, label: '商材' },
-  { to: '/leads', icon: Send, label: 'かんたん紹介' },
-  { to: '/deals', icon: ClipboardList, label: '紹介状況' },
-  { to: '/commissions', icon: Coins, label: 'お礼額' },
-  { to: '/materials', icon: FileText, label: '説明資料' },
-  { to: '/settings', icon: Settings, label: '設定' },
+const NAV_SECTIONS = [
+  { title: null, items: [
+    { to: '/dashboard', icon: LayoutDashboard, label: 'ダッシュボード' },
+  ] },
+  { title: 'パートナー', items: [
+    { to: '/partners', icon: Users, label: 'パートナー' },
+    { to: '/ranks', icon: Award, label: 'ランク' },
+  ] },
+  { title: '紹介・顧客', items: [
+    { to: '/leads', icon: Send, label: 'かんたん紹介' },
+    { to: '/deals', icon: ClipboardList, label: '紹介状況' },
+    { to: '/customers', icon: UserRound, label: '顧客' },
+  ] },
+  { title: '商材・お礼', items: [
+    { to: '/products', icon: Package, label: '商材' },
+    { to: '/commissions', icon: Coins, label: 'お礼額' },
+  ] },
+  { title: 'その他', items: [
+    { to: '/materials', icon: FileText, label: '説明資料' },
+    { to: '/settings', icon: Settings, label: '設定' },
+  ] },
 ];
 
 const PAGE_TITLES = {
@@ -88,9 +98,16 @@ export default function MainLayout() {
           </button>
         </div>
 
-        <nav style={{ flex: 1, overflowY: 'auto', padding: '0.85rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-          {NAV_ITEMS.map((item) => (
-            <NavItem key={item.to} {...item} onClick={() => setOpen(false)} />
+        <nav style={{ flex: 1, overflowY: 'auto', padding: '0.6rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+          {NAV_SECTIONS.map((sec, i) => (
+            <div key={i} style={{ marginTop: i === 0 ? 0 : '0.6rem' }}>
+              {sec.title && (
+                <div style={{ fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.06em', color: 'rgba(255,255,255,0.4)', padding: '0.25rem 0.85rem' }}>{sec.title}</div>
+              )}
+              {sec.items.map((item) => (
+                <NavItem key={item.to} {...item} onClick={() => setOpen(false)} />
+              ))}
+            </div>
           ))}
         </nav>
 

@@ -9,15 +9,22 @@ import { supabase } from './supabase';
 //  ③ 加算なし → 基本報酬率のみ（②で加算0と同義）
 // ============================================================
 
-// 報酬率を解決する。partner / product の現在値から適用率を求める。
+// 報酬率を解決する。productId=プラン。個別報酬率は商材(サービス)単位で適用。
 export async function resolveRewardRate(partnerId, productId) {
-  // ① 個別報酬率
-  if (partnerId && productId) {
+  // プラン情報（基本率・上限・所属商材）
+  const { data: product } = await supabase
+    .from('products')
+    .select('base_reward_rate, max_reward_rate, service_id')
+    .eq('id', productId)
+    .maybeSingle();
+
+  // ① 個別報酬率（商材単位）
+  if (partnerId && product?.service_id) {
     const { data: custom } = await supabase
       .from('partner_commission_rules')
       .select('custom_rate')
       .eq('partner_id', partnerId)
-      .eq('product_id', productId)
+      .eq('service_id', product.service_id)
       .maybeSingle();
     if (custom && custom.custom_rate != null) {
       return { rate: Number(custom.custom_rate), resolved_by: 'custom', custom_rate: Number(custom.custom_rate), rank_addition: 0 };
@@ -25,10 +32,8 @@ export async function resolveRewardRate(partnerId, productId) {
   }
 
   // ② 基本報酬率 + ランク加算率
-  const [{ data: partner }, { data: product }] = await Promise.all([
-    supabase.from('partners').select('status, partner_ranks(rate_addition, name)').eq('id', partnerId).maybeSingle(),
-    supabase.from('products').select('base_reward_rate, max_reward_rate').eq('id', productId).maybeSingle(),
-  ]);
+  const { data: partner } = await supabase
+    .from('partners').select('status, partner_ranks(rate_addition, name)').eq('id', partnerId).maybeSingle();
 
   const base = product?.base_reward_rate != null ? Number(product.base_reward_rate) : 0;
   const rank = partner?.partner_ranks;

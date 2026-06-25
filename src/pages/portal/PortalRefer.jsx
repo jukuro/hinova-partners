@@ -26,12 +26,14 @@ export default function PortalRefer() {
       const [{ data: svc }, { data: prods }, { data: pp }] = await Promise.all([
         supabase.from('services').select('id, name, lp_url').eq('is_active', true).order('sort_order').order('name'),
         supabase.from('products').select('id, name, service_id').eq('is_active', true).order('name'),
-        supabase.from('partner_products').select('product_id').eq('partner_id', partner.id),
+        supabase.from('partner_products').select('service_id').eq('partner_id', partner.id),
       ]);
-      setServices(svc || []);
-      // 担当プランがあればそれを、なければ有効な全プラン
-      const assignedIds = (pp || []).map(r => r.product_id);
-      const list = assignedIds.length ? (prods || []).filter(p => assignedIds.includes(p.id)) : (prods || []);
+      // 担当商材があればその商材を、なければ全商材
+      const assignedSvc = (pp || []).map(r => r.service_id).filter(Boolean);
+      const svcList = assignedSvc.length ? (svc || []).filter(s => assignedSvc.includes(s.id)) : (svc || []);
+      setServices(svcList);
+      // 表示プランは担当商材配下に絞る
+      const list = (prods || []).filter(p => svcList.some(s => s.id === p.service_id));
       setProducts(list);
     })();
   }, [partner]);
