@@ -221,7 +221,57 @@ export default function Partners() {
         </button>
       </div>
 
-      <div className="glass-card" style={{ overflow: 'hidden' }}>
+      {/* スマホ：カード表示 */}
+      <div className="mobile-only">
+        {loading ? (
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>読み込み中...</p>
+        ) : partners.length === 0 ? (
+          <div className="glass-card" style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+            <Users size={28} style={{ opacity: 0.4, marginBottom: '0.5rem' }} /><br />
+            パートナーがまだ登録されていません。
+          </div>
+        ) : (
+          <div>
+            {partners.map(p => {
+              const s = statusInfo(p.status);
+              const iv = inviteState(p);
+              const notActivated = !(p.activated_at || p.auth_user_id);
+              return (
+                <div key={p.id} className="m-card">
+                  <div className="m-card__row">
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: '1rem' }}>{p.name}</div>
+                      {p.name_kana && <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{p.name_kana}</div>}
+                    </div>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.15rem 0.55rem', borderRadius: '9999px', background: s.bg, color: s.color, whiteSpace: 'nowrap' }}>{s.label}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem 0.85rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    <span>{partnerTypeLabel(p.partner_type)}</span>
+                    <span>ランク: {p.partner_ranks?.name || '—'}</span>
+                    <span>担当 {p.partner_products?.length || 0}件</span>
+                    <span style={{ fontFamily: 'monospace', color: 'var(--link)' }}>{p.referral_code || '—'}</span>
+                    <span style={{ fontWeight: 700, color: iv.color }}>招待: {iv.label}</span>
+                    {p.phone && <span>📞 {p.phone}</span>}
+                  </div>
+                  {notActivated && (
+                    <div className="m-card__actions">
+                      <button className="btn btn-primary" onClick={() => sendSmsInvite(p)} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}><MessageSquare size={16} /> SMSで招待</button>
+                      <button className="btn btn-secondary" onClick={() => copyInvite(p)} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}><Link2 size={16} /> URLコピー</button>
+                    </div>
+                  )}
+                  <div className="m-card__actions">
+                    <button className="btn btn-secondary" onClick={() => openEdit(p)} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}><Pencil size={16} /> 編集</button>
+                    <button className="btn btn-danger" onClick={() => handleDelete(p)} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}><Trash2 size={16} /> 削除</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* デスクトップ：テーブル表示 */}
+      <div className="glass-card desktop-only" style={{ overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>

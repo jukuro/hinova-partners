@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import {
   LayoutDashboard, Users, Award, Package, Send, ClipboardList,
-  Coins, FileText, Settings, LogOut,
+  Coins, FileText, Settings, LogOut, Menu, X,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -30,13 +30,14 @@ const PAGE_TITLES = {
   '/settings': '設定',
 };
 
-const NavItem = ({ to, icon: Icon, label }) => (
+const NavItem = ({ to, icon: Icon, label, onClick }) => (
   <NavLink
     to={to}
+    onClick={onClick}
     className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-    style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.6rem 0.85rem', borderRadius: '0.5rem', fontSize: '0.9rem', fontWeight: 600, textDecoration: 'none' }}
+    style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.7rem 0.85rem', borderRadius: '0.5rem', fontSize: '0.95rem', fontWeight: 600, textDecoration: 'none' }}
   >
-    <Icon size={19} />
+    <Icon size={20} />
     <span>{label}</span>
   </NavLink>
 );
@@ -45,23 +46,49 @@ export default function MainLayout() {
   const location = useLocation();
   const { signOut, user } = useAuth();
   const title = PAGE_TITLES[location.pathname] || 'Hinova Partners';
+  const [open, setOpen] = useState(false);
+
+  // ルート変更でドロワーを閉じる
+  useEffect(() => { setOpen(false); }, [location.pathname]);
+
+  // ドロワー表示中は背面スクロールを止める
+  useEffect(() => {
+    if (open) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [open]);
 
   return (
     <div className="app-container" style={{ display: 'flex', minHeight: '100vh' }}>
-      <aside className="sidebar glass" style={{ width: '15rem', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-        <div style={{ padding: '1.5rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', borderBottom: '1px solid rgba(232,184,0,0.15)' }}>
-          <div style={{ width: '2.25rem', height: '2.25rem', borderRadius: '0.65rem', background: 'linear-gradient(135deg, #0d3d3d, #e8b800)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 14px rgba(232,184,0,0.3)' }}>
-            <span style={{ fontWeight: 800, color: '#fff', fontSize: '0.85rem' }}>HP</span>
+      {/* モバイル：ドロワー背景 */}
+      {open && (
+        <div onClick={() => setOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 45 }} />
+      )}
+
+      <aside className={`sidebar glass${open ? ' sidebar-open' : ''}`} style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        <div style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', borderBottom: '1px solid rgba(232,184,0,0.15)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{ width: '2.25rem', height: '2.25rem', borderRadius: '0.65rem', background: 'linear-gradient(135deg, #0d3d3d, #e8b800)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 14px rgba(232,184,0,0.3)' }}>
+              <span style={{ fontWeight: 800, color: '#fff', fontSize: '0.85rem' }}>HP</span>
+            </div>
+            <div style={{ lineHeight: 1.2 }}>
+              <div style={{ fontWeight: 800, color: '#e8b800', fontSize: '1.05rem' }}>Hinova</div>
+              <div style={{ fontWeight: 700, color: 'rgba(255,255,255,0.85)', fontSize: '0.78rem', letterSpacing: '0.08em' }}>PARTNERS</div>
+            </div>
           </div>
-          <div style={{ lineHeight: 1.2 }}>
-            <div style={{ fontWeight: 800, color: '#e8b800', fontSize: '1.05rem' }}>Hinova</div>
-            <div style={{ fontWeight: 700, color: 'rgba(255,255,255,0.85)', fontSize: '0.78rem', letterSpacing: '0.08em' }}>PARTNERS</div>
-          </div>
+          {/* モバイル：閉じるボタン */}
+          <button className="sidebar-close-btn" onClick={() => setOpen(false)} aria-label="メニューを閉じる"
+            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', padding: '0.25rem' }}>
+            <X size={22} />
+          </button>
         </div>
 
         <nav style={{ flex: 1, overflowY: 'auto', padding: '0.85rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
           {NAV_ITEMS.map((item) => (
-            <NavItem key={item.to} {...item} />
+            <NavItem key={item.to} {...item} onClick={() => setOpen(false)} />
           ))}
         </nav>
 
@@ -69,21 +96,26 @@ export default function MainLayout() {
           <button
             onClick={signOut}
             className="nav-item btn-logout"
-            style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.6rem 0.85rem', borderRadius: '0.5rem', fontSize: '0.9rem', fontWeight: 600, width: '100%' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.7rem 0.85rem', borderRadius: '0.5rem', fontSize: '0.95rem', fontWeight: 600, width: '100%' }}
           >
-            <LogOut size={19} />
+            <LogOut size={20} />
             <span>ログアウト</span>
           </button>
         </div>
       </aside>
 
       <main className="main-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <header className="topbar glass" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.85rem 1.75rem', borderBottom: '1px solid var(--border-light)' }}>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>{title}</h2>
-          <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>{user?.email}</span>
+        <header className="topbar glass" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.7rem 1rem', borderBottom: '1px solid var(--border-light)', position: 'sticky', top: 0, zIndex: 30 }}>
+          {/* モバイル：ハンバーガー */}
+          <button className="hamburger-btn" onClick={() => setOpen(true)} aria-label="メニューを開く"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)', padding: '0.35rem', display: 'inline-flex' }}>
+            <Menu size={24} />
+          </button>
+          <h2 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</h2>
+          <span className="topbar-email" style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>{user?.email}</span>
         </header>
 
-        <div style={{ flex: 1, padding: '1.75rem', overflowY: 'auto' }}>
+        <div style={{ flex: 1, padding: '1.25rem', overflowY: 'auto' }}>
           <Outlet />
         </div>
       </main>
