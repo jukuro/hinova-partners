@@ -32,26 +32,41 @@ export default function PortalRefer() {
   }, [partner]);
 
   const code = partner?.referral_code;
-  const lpProducts = products.filter(p => p.lp_url);
 
-  const shareLp = async (p) => {
-    const url = withRef(p.lp_url, code);
+  // 同じLP URLは1つにまとめる（例：Biz スタンダード/プレミアムは同一LP）
+  const baseName = (name) => (name || '').split(/\s*[-－]\s*/)[0].trim();
+  const lpGroups = (() => {
+    const map = {};
+    products.filter(p => p.lp_url).forEach(p => {
+      if (!map[p.lp_url]) map[p.lp_url] = { lp_url: p.lp_url, names: [], bases: new Set() };
+      map[p.lp_url].names.push(p.name);
+      map[p.lp_url].bases.add(baseName(p.name));
+    });
+    return Object.values(map).map(g => ({
+      lp_url: g.lp_url,
+      // 共通の事業名（例：Hinova Biz）。揃わなければ商品名を併記
+      label: g.bases.size === 1 ? [...g.bases][0] : g.names.join(' / '),
+    }));
+  })();
+
+  const shareLp = async (g) => {
+    const url = withRef(g.lp_url, code);
     if (!url) return;
-    const text = `${p.name} のご案内です。下記からご覧ください。`;
+    const text = `${g.label} のご案内です。下記からご覧ください。`;
     if (navigator.share) {
-      try { await navigator.share({ title: p.name, text, url }); } catch { /* キャンセル */ }
+      try { await navigator.share({ title: g.label, text, url }); } catch { /* キャンセル */ }
     } else {
       try { await navigator.clipboard.writeText(url); toast.success('紹介リンクをコピーしました'); }
       catch { toast.error('コピーに失敗: ' + url); }
     }
   };
-  const lineLp = (p) => {
-    const url = withRef(p.lp_url, code);
+  const lineLp = (g) => {
+    const url = withRef(g.lp_url, code);
     if (!url) return;
-    window.open(`https://line.me/R/msg/text/?${encodeURIComponent(`${p.name} のご案内です。\n${url}`)}`, '_blank');
+    window.open(`https://line.me/R/msg/text/?${encodeURIComponent(`${g.label} のご案内です。\n${url}`)}`, '_blank');
   };
-  const copyLp = async (p) => {
-    const url = withRef(p.lp_url, code);
+  const copyLp = async (g) => {
+    const url = withRef(g.lp_url, code);
     if (!url) return;
     try { await navigator.clipboard.writeText(url); toast.success('紹介リンクをコピーしました'); }
     catch { toast.error('コピーに失敗: ' + url); }
@@ -99,17 +114,17 @@ export default function PortalRefer() {
         <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.25rem' }}>商品ページのリンクをLINEやSNSで送るだけ。リンクにはあなたの紹介コードが付きます。</p>
       </div>
 
-      {/* 商品リンクで紹介（LP + 紹介コード） */}
-      {lpProducts.length > 0 && (
+      {/* 商品リンクで紹介（LP + 紹介コード）。同一LPは1つにまとめる */}
+      {lpGroups.length > 0 && (
         <div className="glass-card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           <div style={{ fontSize: '0.9rem', fontWeight: 800 }}>商品リンクを送る</div>
-          {lpProducts.map(p => (
-            <div key={p.id} style={{ borderTop: '1px solid var(--border-light)', paddingTop: '0.6rem' }}>
-              <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.4rem' }}>{p.name}</div>
+          {lpGroups.map(g => (
+            <div key={g.lp_url} style={{ borderTop: '1px solid var(--border-light)', paddingTop: '0.6rem' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.4rem' }}>{g.label}</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem' }}>
-                <button type="button" className="btn btn-primary" onClick={() => shareLp(p)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', padding: '0.55rem' }}><Share2 size={15} /> 送る</button>
-                <button type="button" className="btn btn-secondary" onClick={() => lineLp(p)} style={{ padding: '0.55rem', color: '#06c755', fontWeight: 700 }}>LINE</button>
-                <button type="button" className="btn btn-secondary" onClick={() => copyLp(p)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', padding: '0.55rem' }}><Link2 size={15} /> コピー</button>
+                <button type="button" className="btn btn-primary" onClick={() => shareLp(g)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', padding: '0.55rem' }}><Share2 size={15} /> 送る</button>
+                <button type="button" className="btn btn-secondary" onClick={() => lineLp(g)} style={{ padding: '0.55rem', color: '#06c755', fontWeight: 700 }}>LINE</button>
+                <button type="button" className="btn btn-secondary" onClick={() => copyLp(g)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', padding: '0.55rem' }}><Link2 size={15} /> コピー</button>
               </div>
             </div>
           ))}
