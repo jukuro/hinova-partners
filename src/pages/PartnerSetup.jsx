@@ -6,6 +6,17 @@ import InstallPrompt from '../components/InstallPrompt';
 import AppLoading from '../components/AppLoading';
 import { UserPlus, CheckCircle } from 'lucide-react';
 
+// 共通の外枠（コンポーネント外で定義：再レンダリングで作り直されないようにする）
+function Shell({ children }) {
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+      <div className="glass-card animate-fade-in" style={{ width: '100%', maxWidth: '30rem', padding: '2rem' }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function PartnerSetup() {
   const { token } = useParams();
   const navigate = useNavigate();
@@ -78,14 +89,6 @@ export default function PartnerSetup() {
   };
 
   if (loading) return <AppLoading message="読み込み中..." />;
-
-  const Shell = ({ children }) => (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-      <div className="glass-card animate-fade-in" style={{ width: '100%', maxWidth: '30rem', padding: '2rem' }}>
-        {children}
-      </div>
-    </div>
-  );
 
   if (invalid) {
     return (
